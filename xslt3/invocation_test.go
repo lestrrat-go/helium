@@ -8,6 +8,7 @@ import (
 	"testing"
 
 	"github.com/lestrrat-go/helium"
+	"github.com/lestrrat-go/helium/internal/lexicon"
 	"github.com/lestrrat-go/helium/xpath3"
 	"github.com/lestrrat-go/helium/xslt3"
 	"github.com/stretchr/testify/require"
@@ -814,8 +815,8 @@ func TestStylesheetReuse(t *testing.T) {
 
 // fn:transform error codes asserted by the option-validation table.
 const (
-	wantFOXT0002 = "FOXT0002"
-	wantXPTY0004 = "XPTY0004"
+	wantFOXT0002 = lexicon.ErrFOXT0002
+	wantXPTY0004 = lexicon.ErrXPTY0004
 )
 
 // XSLT-namespace requested-property local names asserted by the capability table.
@@ -866,7 +867,7 @@ func TestTransformOptions(t *testing.T) {
 				transformFns(),
 			)
 			require.Error(t, err)
-			require.Contains(t, err.Error(), "XTDE0820")
+			require.Contains(t, err.Error(), lexicon.ErrXTDE0820)
 		})
 	})
 
@@ -985,7 +986,7 @@ func TestTransformOptions(t *testing.T) {
 					transformFns(),
 				)
 				require.Error(t, err)
-				require.Contains(t, err.Error(), "FOXT0006")
+				require.Contains(t, err.Error(), lexicon.ErrFOXT0006)
 			})
 		}
 
@@ -1119,7 +1120,7 @@ func TestTransformOptions(t *testing.T) {
 				transformFns(),
 			)
 			require.Error(t, err)
-			require.Contains(t, err.Error(), "SESU0007")
+			require.Contains(t, err.Error(), lexicon.ErrSESU0007)
 		})
 
 		// An EXPLICIT base stylesheet version (<xsl:output method="html"
@@ -1134,7 +1135,7 @@ func TestTransformOptions(t *testing.T) {
 				transformFns(),
 			)
 			require.Error(t, err)
-			require.Contains(t, err.Error(), "SESU0007")
+			require.Contains(t, err.Error(), lexicon.ErrSESU0007)
 		})
 	})
 }

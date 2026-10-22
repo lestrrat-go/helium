@@ -24,7 +24,7 @@ func (ec *execContext) execElement(ctx context.Context, inst *elementInst) error
 	// XTDE0820: validate computed name is a valid QName
 	name = strings.TrimSpace(name)
 	if name == "" || !xmlchar.IsValidQName(name) {
-		return dynamicError(errCodeXTDE0820,
+		return dynamicError(lexicon.ErrXTDE0820,
 			"invalid element name %q: not a valid QName", name)
 	}
 
@@ -49,7 +49,7 @@ func (ec *execContext) execElement(ctx context.Context, inst *elementInst) error
 		}
 		// XTDE0835: namespace URI must not be the reserved xmlns namespace
 		if nsURI == lexicon.NamespaceXMLNS {
-			return dynamicError(errCodeXTDE0835,
+			return dynamicError(lexicon.ErrXTDE0835,
 				"namespace URI %q is reserved and cannot be used", nsURI)
 		}
 		if nsURI != "" {
@@ -91,7 +91,7 @@ func (ec *execContext) execElement(ctx context.Context, inst *elementInst) error
 			}
 		} else if prefix != "" {
 			// XTDE0830: prefix in computed element name is undeclared
-			return dynamicError(errCodeXTDE0830,
+			return dynamicError(lexicon.ErrXTDE0830,
 				"undeclared namespace prefix %q in element name %q", prefix, name)
 		}
 	}
@@ -171,8 +171,8 @@ func (ec *execContext) execElement(ctx context.Context, inst *elementInst) error
 	if inst.TypeName != "" {
 		if err := ec.validateAndNormalizeElementContent(ctx, elem, inst.TypeName); err != nil {
 			// XTTE1540: content does not match the declared type.
-			if xsltErr, ok := errors.AsType[*XSLTError](err); ok && xsltErr.Code == errCodeXTTE1510 {
-				return dynamicError(errCodeXTTE1540,
+			if xsltErr, ok := errors.AsType[*XSLTError](err); ok && xsltErr.Code == lexicon.ErrXTTE1510 {
+				return dynamicError(lexicon.ErrXTTE1540,
 					"element content does not match declared type %s: %v", inst.TypeName, xsltErr.Message)
 			}
 			return err
@@ -212,13 +212,13 @@ func (ec *execContext) validateConstructedAttribute(ctx context.Context, localNa
 	if typeName == "" {
 		// No matching global attribute declaration found.
 		if validation == validationStrict {
-			return "", dynamicError(errCodeXTTE1555,
+			return "", dynamicError(lexicon.ErrXTTE1555,
 				"no schema declaration found for attribute {%s}%s (validation=strict)", nsURI, localName)
 		}
 		return "", nil // lax: silently skip if no declaration
 	}
 	if !valid || valErr != nil {
-		return "", dynamicError(errCodeXTTE1510,
+		return "", dynamicError(lexicon.ErrXTTE1510,
 			"attribute {%s}%s value %q is not valid for type %s: %v", nsURI, localName, value, typeName, valErr)
 	}
 	return typeName, nil
@@ -276,7 +276,7 @@ func (ec *execContext) validateAndNormalizeElementContent(ctx context.Context, e
 				}
 			}
 			if lastErr != nil {
-				return dynamicError(errCodeXTTE1510,
+				return dynamicError(lexicon.ErrXTTE1510,
 					"element content does not match declared type %s: %v", typeName, lastErr)
 			}
 		}
@@ -285,7 +285,7 @@ func (ec *execContext) validateAndNormalizeElementContent(ctx context.Context, e
 	// Built-in simple types (xs:string, xs:integer, xs:untypedAtomic, etc.)
 	// require that the element have simple content — no child elements.
 	if elementHasChildElements(elem) {
-		return dynamicError(errCodeXTTE1510,
+		return dynamicError(lexicon.ErrXTTE1510,
 			"element has child elements but type %s requires simple content", typeName)
 	}
 
@@ -298,12 +298,12 @@ func (ec *execContext) validateAndNormalizeElementContent(ctx context.Context, e
 		if ec.schemaRegistry != nil {
 			_, schemaErr := ec.schemaRegistry.CastToSchemaType(ctx, content, typeName)
 			if schemaErr != nil {
-				return dynamicError(errCodeXTTE1510,
+				return dynamicError(lexicon.ErrXTTE1510,
 					"content %q is not a valid value for type %s: %v", content, typeName, schemaErr)
 			}
 			return nil
 		}
-		return dynamicError(errCodeXTTE1510,
+		return dynamicError(lexicon.ErrXTTE1510,
 			"content %q is not a valid value for type %s: %v", content, typeName, castErr)
 	}
 
@@ -380,9 +380,9 @@ func (ec *execContext) validateConstructedElement(ctx context.Context, elem *hel
 		if valErr != nil {
 			switch validation {
 			case validationStrict:
-				return dynamicError(errCodeXTTE1510, "validation of constructed element failed: %v", valErr)
+				return dynamicError(lexicon.ErrXTTE1510, "validation of constructed element failed: %v", valErr)
 			case validationLax:
-				return dynamicError(errCodeXTTE1515, "lax validation of constructed element failed: %v", valErr)
+				return dynamicError(lexicon.ErrXTTE1515, "lax validation of constructed element failed: %v", valErr)
 			}
 		} else if ann == nil || (len(ann) == 0 && elem.URI() != "" && !ec.schemaRegistry.HasNamespace(elem.URI())) {
 			// No matching schema found, or the element's namespace is not
@@ -391,7 +391,7 @@ func (ec *execContext) validateConstructedElement(ctx context.Context, elem *hel
 				elemNS := elem.URI()
 				elemLocal := elem.LocalName()
 				if _, found := ec.schemaRegistry.LookupElement(elemLocal, elemNS); !found {
-					return dynamicError(errCodeXTTE1512,
+					return dynamicError(lexicon.ErrXTTE1512,
 						"no schema declaration found for element {%s}%s (validation=strict)", elemNS, elemLocal)
 				}
 			}
@@ -408,11 +408,11 @@ func (ec *execContext) validateConstructedElement(ctx context.Context, elem *hel
 					if _, castErr := xpath3.CastFromString(content, typeName); castErr != nil {
 						switch validation {
 						case validationStrict:
-							return dynamicError(errCodeXTTE1510,
+							return dynamicError(lexicon.ErrXTTE1510,
 								"element {%s}%s content %q is not valid for type %s: %v",
 								elemNS, elemLocal, content, typeName, castErr)
 						case validationLax:
-							return dynamicError(errCodeXTTE1515,
+							return dynamicError(lexicon.ErrXTTE1515,
 								"element {%s}%s content %q is not valid for type %s: %v",
 								elemNS, elemLocal, content, typeName, castErr)
 						}
@@ -492,14 +492,14 @@ func (ec *execContext) validateConstructedElementWithIDCheck(ctx context.Context
 		if valErr != nil {
 			switch validation {
 			case validationStrict:
-				return dynamicError(errCodeXTTE1510, "validation of constructed element failed: %v", valErr)
+				return dynamicError(lexicon.ErrXTTE1510, "validation of constructed element failed: %v", valErr)
 			case validationLax:
-				return dynamicError(errCodeXTTE1515, "lax validation of constructed element failed: %v", valErr)
+				return dynamicError(lexicon.ErrXTTE1515, "lax validation of constructed element failed: %v", valErr)
 			}
 		} else if ann == nil || (len(ann) == 0 && elem.URI() != "" && !ec.schemaRegistry.HasNamespace(elem.URI())) {
 			if validation == validationStrict {
 				if _, found := ec.schemaRegistry.LookupElement(elem.LocalName(), elem.URI()); !found {
-					return dynamicError(errCodeXTTE1512,
+					return dynamicError(lexicon.ErrXTTE1512,
 						"no schema declaration found for element {%s}%s (validation=strict)", elem.URI(), elem.LocalName())
 				}
 			}
@@ -509,11 +509,11 @@ func (ec *execContext) validateConstructedElementWithIDCheck(ctx context.Context
 				if _, castErr := xpath3.CastFromString(content, ann[copied]); castErr != nil {
 					switch validation {
 					case validationStrict:
-						return dynamicError(errCodeXTTE1510,
+						return dynamicError(lexicon.ErrXTTE1510,
 							"element {%s}%s content %q is not valid for type %s: %v",
 							elem.URI(), elem.LocalName(), content, ann[copied], castErr)
 					case validationLax:
-						return dynamicError(errCodeXTTE1515,
+						return dynamicError(lexicon.ErrXTTE1515,
 							"element {%s}%s content %q is not valid for type %s: %v",
 							elem.URI(), elem.LocalName(), content, ann[copied], castErr)
 					}
@@ -659,13 +659,13 @@ func (ec *execContext) annotateAttributesFromType(elem *helium.Element, typeName
 func validateComputedAttributeName(name string, inst *attributeInst) error {
 	// XTDE0855: when no namespace attribute, name must not be "xmlns"
 	if inst.Namespace == nil && name == lexicon.PrefixXMLNS {
-		return dynamicError(errCodeXTDE0855,
+		return dynamicError(lexicon.ErrXTDE0855,
 			"xsl:attribute name must not be %q when no namespace attribute is specified", name)
 	}
 
 	// XTDE0850: name must be a valid QName
 	if !xmlchar.IsValidQName(name) && !isValidEQName(name) {
-		return dynamicError(errCodeXTDE0850,
+		return dynamicError(lexicon.ErrXTDE0850,
 			"xsl:attribute name %q is not a valid QName", name)
 	}
 
@@ -708,7 +708,7 @@ func (ec *execContext) resolveComputedAttributeName(ctx context.Context, name st
 		}
 		// XTDE0865: the xmlns namespace URI is reserved.
 		if nsURI == lexicon.NamespaceXMLNS {
-			return resolvedAttrName{}, dynamicError(errCodeXTDE0865,
+			return resolvedAttrName{}, dynamicError(lexicon.ErrXTDE0865,
 				"namespace URI %q is reserved and cannot be used for attributes", nsURI)
 		}
 		if nsURI == "" {
@@ -730,7 +730,7 @@ func (ec *execContext) resolveComputedAttributeName(ctx context.Context, name st
 	nsURI := ec.resolvePrefix(prefix)
 	if nsURI == "" {
 		// XTDE0860: prefix in computed attribute name is undeclared.
-		return resolvedAttrName{}, dynamicError(errCodeXTDE0860,
+		return resolvedAttrName{}, dynamicError(lexicon.ErrXTDE0860,
 			"undeclared namespace prefix %q in attribute name %q", prefix, name)
 	}
 	return resolvedAttrName{localName: localName, nsURI: nsURI, prefix: prefix}, nil
@@ -823,12 +823,12 @@ func (ec *execContext) execAttribute(ctx context.Context, inst *attributeInst) e
 			if ec.schemaRegistry != nil {
 				normalized, schemaErr := ec.schemaRegistry.CastToSchemaType(ctx, value, inst.TypeName)
 				if schemaErr != nil {
-					return dynamicError(errCodeXTTE1515,
+					return dynamicError(lexicon.ErrXTTE1515,
 						"attribute value %q does not match type %s: %v", value, inst.TypeName, schemaErr)
 				}
 				value = normalized
 			} else {
-				return dynamicError(errCodeXTTE1515, "attribute value %q does not match type %s", value, inst.TypeName)
+				return dynamicError(lexicon.ErrXTTE1515, "attribute value %q does not match type %s", value, inst.TypeName)
 			}
 		} else if s, sErr := xpath3.AtomicToString(av); sErr == nil {
 			value = s
@@ -893,7 +893,7 @@ func (ec *execContext) execAttribute(ctx context.Context, inst *attributeInst) e
 		// XTDE0420: it is a dynamic error if the result sequence used to
 		// construct the content of a document node contains an attribute node.
 		if _, isDoc := out.current.(*helium.Document); isDoc && !out.sequenceMode && !ec.isItemOutputMethod() {
-			return dynamicError(errCodeXTDE0420,
+			return dynamicError(lexicon.ErrXTDE0420,
 				"cannot add attribute %q to a document node", name)
 		}
 		// In adaptive/json output mode or build-tree=no, capture the
@@ -921,14 +921,14 @@ func (ec *execContext) execAttribute(ctx context.Context, inst *attributeInst) e
 			}
 			return nil
 		}
-		return dynamicError(errCodeXTDE0820, "xsl:attribute must be added to an element")
+		return dynamicError(lexicon.ErrXTDE0820, "xsl:attribute must be added to an element")
 	}
 
 	// XTDE0410: cannot add attribute after child content has been added.
 	// Inside xsl:where-populated the body is evaluated into a temporary tree
 	// and later filtered, so attribute-after-child is permitted during evaluation.
 	if !out.wherePopulated && out.hasChildContent(elem) {
-		return dynamicError(errCodeXTDE0410, "cannot add attribute to element after children have been added")
+		return dynamicError(lexicon.ErrXTDE0410, "cannot add attribute to element after children have been added")
 	}
 
 	// Attribute belongs to a namespace: declare the namespace on the element
@@ -1330,11 +1330,11 @@ func (ec *execContext) execPI(ctx context.Context, inst *piInst) error {
 
 	// XTDE0890: name must be a valid NCName and PITarget
 	if !xmlchar.IsValidNCName(name) {
-		return dynamicError(errCodeXTDE0890,
+		return dynamicError(lexicon.ErrXTDE0890,
 			"xsl:processing-instruction name %q is not a valid NCName", name)
 	}
 	if strings.EqualFold(name, "xml") {
-		return dynamicError(errCodeXTDE0890,
+		return dynamicError(lexicon.ErrXTDE0890,
 			"xsl:processing-instruction name must not be %q", name)
 	}
 
@@ -1377,35 +1377,35 @@ func (ec *execContext) execNamespace(ctx context.Context, inst *namespaceInst) e
 	// XTDE0920: the name must be either a zero-length string or an NCName,
 	// and must not be "xmlns".
 	if name == lexicon.PrefixXMLNS {
-		return dynamicError(errCodeXTDE0920,
+		return dynamicError(lexicon.ErrXTDE0920,
 			"cannot create namespace node with prefix %q", name)
 	}
 	if name != "" && !xmlchar.IsValidNCName(name) {
-		return dynamicError(errCodeXTDE0920,
+		return dynamicError(lexicon.ErrXTDE0920,
 			"xsl:namespace name %q is not a valid NCName", name)
 	}
 	// XTDE0925: xml prefix requires the XML namespace URI, and
 	// the XML namespace URI requires the xml prefix.
 	if name == lexicon.PrefixXML && value != lexicon.NamespaceXML {
-		return dynamicError(errCodeXTDE0925,
+		return dynamicError(lexicon.ErrXTDE0925,
 			"namespace prefix %q must be bound to %q, got %q",
 			name, lexicon.NamespaceXML, value)
 	}
 	if value == lexicon.NamespaceXML && name != lexicon.PrefixXML {
-		return dynamicError(errCodeXTDE0925,
+		return dynamicError(lexicon.ErrXTDE0925,
 			"namespace URI %q can only be bound to prefix %q, got %q",
 			value, lexicon.PrefixXML, name)
 	}
 	// XTDE0905: the xmlns namespace URI is reserved
 	if value == lexicon.NamespaceXMLNS {
-		return dynamicError(errCodeXTDE0905,
+		return dynamicError(lexicon.ErrXTDE0905,
 			"namespace URI %q is reserved and cannot be used", value)
 	}
 	// XTDE0905: namespace URI must be valid in the lexical space of xs:anyURI.
 	// Under XSD 1.1, xs:anyURI accepts any string, so no further check is needed.
 	// XTDE0930: non-empty prefix with zero-length namespace URI
 	if name != "" && value == "" {
-		return dynamicError(errCodeXTDE0930,
+		return dynamicError(lexicon.ErrXTDE0930,
 			"namespace prefix %q requires a non-empty URI", name)
 	}
 
@@ -1427,7 +1427,7 @@ func (ec *execContext) execNamespace(ctx context.Context, inst *namespaceInst) e
 	}
 	elem, ok := out.current.(*helium.Element)
 	if !ok {
-		return dynamicError(errCodeXTDE0420,
+		return dynamicError(lexicon.ErrXTDE0420,
 			"cannot add namespace node to a non-element node")
 	}
 
@@ -1443,14 +1443,14 @@ func (ec *execContext) execNamespace(ctx context.Context, inst *namespaceInst) e
 			if fixupOK && elem.Prefix() == name && elem.URI() == ns.URI() {
 				continue // allow fixup below
 			}
-			return dynamicError(errCodeXTDE0430,
+			return dynamicError(lexicon.ErrXTDE0430,
 				"namespace prefix %q is already bound to %q; cannot rebind to %q", name, ns.URI(), value)
 		}
 	}
 
 	// XTDE0440: defining a default namespace when the element is in no namespace
 	if name == "" && value != "" && elem.URI() == "" && elem.Prefix() == "" {
-		return dynamicError(errCodeXTDE0440,
+		return dynamicError(lexicon.ErrXTDE0440,
 			"cannot define default namespace %q on element %q which is in no namespace",
 			value, elem.Name())
 	}
@@ -1532,13 +1532,13 @@ func (ec *execContext) checkQNameAttrConflicts(elem *helium.Element) error {
 	for i := range qnames {
 		// If the prefix can't be resolved at all, that's an error.
 		if qnames[i].uri == "" {
-			return dynamicError(errCodeXTTE1510,
+			return dynamicError(lexicon.ErrXTTE1510,
 				"QName attribute @%s has value with prefix %q that is not declared on the element",
 				qnames[i].name, qnames[i].prefix)
 		}
 		for j := i + 1; j < len(qnames); j++ {
 			if qnames[i].prefix == qnames[j].prefix && qnames[i].uri != qnames[j].uri {
-				return dynamicError(errCodeXTTE1510,
+				return dynamicError(lexicon.ErrXTTE1510,
 					"QName attributes @%s and @%s use prefix %q bound to different namespaces (%q vs %q)",
 					qnames[i].name, qnames[j].name, qnames[i].prefix, qnames[i].uri, qnames[j].uri)
 			}

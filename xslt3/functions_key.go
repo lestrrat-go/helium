@@ -13,13 +13,13 @@ import (
 
 func (ec *execContext) fnKey(ctx context.Context, args []xpath3.Sequence) (xpath3.Sequence, error) {
 	if len(args) < 2 {
-		return nil, dynamicError(errCodeXTDE1170, "key() requires at least 2 arguments")
+		return nil, dynamicError(lexicon.ErrXTDE1170, "key() requires at least 2 arguments")
 	}
 
 	// fn:key($key-name as xs:string, ...): the first argument is required to be
 	// a single string. An empty sequence is a type error, not a panic.
 	if args[0] == nil || sequence.Len(args[0]) == 0 {
-		return nil, dynamicError(errCodeXPTY0004, "key() first argument must be a single xs:string, got empty sequence")
+		return nil, dynamicError(lexicon.ErrXPTY0004, "key() first argument must be a single xs:string, got empty sequence")
 	}
 
 	nameAV, err := xpath3.AtomizeItem(args[0].Get(0))
@@ -52,7 +52,7 @@ func (ec *execContext) fnKey(ctx context.Context, args []xpath3.Sequence) (xpath
 				r = r.Parent()
 			}
 			if r.Type() != helium.DocumentNode {
-				return nil, dynamicError(errCodeXTDE1270,
+				return nil, dynamicError(lexicon.ErrXTDE1270,
 					"key() third argument: root of tree is not a document node")
 			}
 			root = ni.Node
@@ -65,7 +65,7 @@ func (ec *execContext) fnKey(ctx context.Context, args []xpath3.Sequence) (xpath
 		}
 		if ctxNode == nil {
 			// XTDE1270: no context node
-			return nil, dynamicError(errCodeXTDE1270,
+			return nil, dynamicError(lexicon.ErrXTDE1270,
 				"key() called with no context node")
 		}
 		// XTDE1270: root of context node's tree must be a document node
@@ -74,7 +74,7 @@ func (ec *execContext) fnKey(ctx context.Context, args []xpath3.Sequence) (xpath
 			r = r.Parent()
 		}
 		if r.Type() != helium.DocumentNode {
-			return nil, dynamicError(errCodeXTDE1270,
+			return nil, dynamicError(lexicon.ErrXTDE1270,
 				"key() context node's root is not a document node")
 		}
 		root = documentRoot(ctxNode)
@@ -158,7 +158,7 @@ func (ec *execContext) fnGenerateID(ctx context.Context, args []xpath3.Sequence)
 	} else {
 		ni, ok := args[0].Get(0).(xpath3.NodeItem)
 		if !ok {
-			return nil, dynamicError(errCodeXPTY0004, "generate-id() argument must be a node")
+			return nil, dynamicError(lexicon.ErrXPTY0004, "generate-id() argument must be a node")
 		}
 		node = ni.Node
 	}
@@ -185,7 +185,7 @@ func (ec *execContext) fnSystemProperty(ctx context.Context, args []xpath3.Seque
 
 	// XTDE1390: validate that the argument is a valid QName or EQName.
 	if !strings.HasPrefix(name, "Q{") && !xmlchar.IsValidQName(name) {
-		return nil, dynamicError(errCodeXTDE1390,
+		return nil, dynamicError(lexicon.ErrXTDE1390,
 			"system-property argument %q is not a valid QName", name)
 	}
 
@@ -210,7 +210,7 @@ func (ec *execContext) fnSystemProperty(ctx context.Context, args []xpath3.Seque
 		}
 		// XTDE1390: prefix has no namespace declaration
 		if !resolved {
-			return nil, dynamicError(errCodeXTDE1390,
+			return nil, dynamicError(lexicon.ErrXTDE1390,
 				"system-property prefix %q has no namespace declaration", prefix)
 		}
 	}
@@ -369,7 +369,7 @@ func (ec *execContext) fnUnparsedEntityURI(ctx context.Context, args []xpath3.Se
 			ctxNode = ec.contextNode
 		}
 		if ctxNode == nil {
-			return nil, dynamicError(errCodeXTDE1370,
+			return nil, dynamicError(lexicon.ErrXTDE1370,
 				"unparsed-entity-uri called when there is no context node")
 		}
 		root := ctxNode
@@ -377,7 +377,7 @@ func (ec *execContext) fnUnparsedEntityURI(ctx context.Context, args []xpath3.Se
 			root = root.Parent()
 		}
 		if root.Type() != helium.DocumentNode {
-			return nil, dynamicError(errCodeXTDE1370,
+			return nil, dynamicError(lexicon.ErrXTDE1370,
 				"unparsed-entity-uri called when root of context tree is not a document node")
 		}
 		doc, _ = root.(*helium.Document)
@@ -427,7 +427,7 @@ func (ec *execContext) fnUnparsedEntityPublicID(ctx context.Context, args []xpat
 			ctxNode = ec.contextNode
 		}
 		if ctxNode == nil {
-			return nil, dynamicError(errCodeXTDE1380,
+			return nil, dynamicError(lexicon.ErrXTDE1380,
 				"unparsed-entity-public-id called when there is no context node")
 		}
 		root := ctxNode
@@ -435,7 +435,7 @@ func (ec *execContext) fnUnparsedEntityPublicID(ctx context.Context, args []xpat
 			root = root.Parent()
 		}
 		if root.Type() != helium.DocumentNode {
-			return nil, dynamicError(errCodeXTDE1380,
+			return nil, dynamicError(lexicon.ErrXTDE1380,
 				"unparsed-entity-public-id called when root of context tree is not a document node")
 		}
 		doc, _ = root.(*helium.Document)

@@ -626,7 +626,7 @@ func validateSerializationParams(outDef *OutputDef, doc *helium.Document) error 
 		if method == methodXML || method == methodXHTML {
 			elemCount := countRootElements(doc)
 			if elemCount > 1 {
-				return dynamicError(errCodeSEPM0004,
+				return dynamicError(lexicon.ErrSEPM0004,
 					"standalone=%q specified but result has %d root elements", outDef.Standalone, elemCount)
 			}
 		}
@@ -637,7 +637,7 @@ func validateSerializationParams(outDef *OutputDef, doc *helium.Document) error 
 		if method == methodXML || method == methodXHTML {
 			elemCount := countRootElements(doc)
 			if elemCount > 1 {
-				return dynamicError(errCodeSEPM0004,
+				return dynamicError(lexicon.ErrSEPM0004,
 					"doctype-system specified but result has %d root elements", elemCount)
 			}
 		}
@@ -647,25 +647,25 @@ func validateSerializationParams(outDef *OutputDef, doc *helium.Document) error 
 	// Only applicable for xml/xhtml methods — text/html/json don't have XML declarations.
 	if outDef.OmitDeclaration && (method == methodXML || method == methodXHTML) {
 		if outDef.Standalone == lexicon.ValueYes || outDef.Standalone == lexicon.ValueNo {
-			return dynamicError(errCodeSEPM0009,
+			return dynamicError(lexicon.ErrSEPM0009,
 				"omit-xml-declaration=\"yes\" conflicts with standalone=%q", outDef.Standalone)
 		}
 		if outDef.DoctypeSystem != "" && outDef.Version != "" && outDef.Version != "1.0" {
-			return dynamicError(errCodeSEPM0009,
+			return dynamicError(lexicon.ErrSEPM0009,
 				"omit-xml-declaration=\"yes\" conflicts with doctype-system and version=%q", outDef.Version)
 		}
 	}
 
 	// SEPM0010: undeclare-prefixes="yes" with version="1.0"
 	if outDef.UndeclarePrefixes && outDef.Version == "1.0" {
-		return dynamicError(errCodeSEPM0010,
+		return dynamicError(lexicon.ErrSEPM0010,
 			"undeclare-prefixes=\"yes\" is not allowed with version=\"1.0\"")
 	}
 
 	// SEPM0016: invalid doctype-public (contains non-pubid characters)
 	if outDef.DoctypePublic != "" {
 		if !isValidPublicID(outDef.DoctypePublic) {
-			return dynamicError(errCodeSEPM0016,
+			return dynamicError(lexicon.ErrSEPM0016,
 				"doctype-public %q contains invalid characters", outDef.DoctypePublic)
 		}
 	}
@@ -676,7 +676,7 @@ func validateSerializationParams(outDef *OutputDef, doc *helium.Document) error 
 		if enc != "" && enc != lexicon.EncodingUTF8 && enc != "utf8" && enc != lexicon.EncodingUTF16 && enc != "utf16" {
 			_, encErr := htmlindex.Get(enc)
 			if encErr != nil {
-				return dynamicError(errCodeSESU0007,
+				return dynamicError(lexicon.ErrSESU0007,
 					"unsupported encoding %q for %s output method", outDef.Encoding, method)
 			}
 		}
@@ -686,7 +686,7 @@ func validateSerializationParams(outDef *OutputDef, doc *helium.Document) error 
 	if method == methodHTML && outDef.MethodExplicit && outDef.Version != "" {
 		v, err := strconv.ParseFloat(outDef.Version, 64)
 		if err == nil && v != 4.0 && v != 4.01 && v != 5.0 {
-			return dynamicError(errCodeSESU0007,
+			return dynamicError(lexicon.ErrSESU0007,
 				"unsupported version %q for html output method", outDef.Version)
 		}
 	}
@@ -697,7 +697,7 @@ func validateSerializationParams(outDef *OutputDef, doc *helium.Document) error 
 		case normalizationFormNFC, "NFD", "NFKC", "NFKD", "FULLY-NORMALIZED":
 			// supported
 		default:
-			return dynamicError(errCodeSESU0011,
+			return dynamicError(lexicon.ErrSESU0011,
 				"unsupported normalization-form %q", outDef.NormalizationForm)
 		}
 	}
@@ -779,7 +779,7 @@ func checkFullyNormalized(doc *helium.Document) error {
 			if len(content) > 0 {
 				r, _ := utf8.DecodeRuneInString(content)
 				if unicode.In(r, unicode.Mn, unicode.Mc, unicode.Me) {
-					firstErr = dynamicError(errCodeSERE0012,
+					firstErr = dynamicError(lexicon.ErrSERE0012,
 						"fully-normalized output begins with combining character U+%04X", r)
 					return firstErr
 				}
@@ -803,7 +803,7 @@ func checkHTMLInvalidChars(doc *helium.Document) error {
 			content := string(n.Content())
 			for _, r := range content {
 				if r >= 0x7F && r <= 0x9F && r != 0x85 {
-					firstErr = dynamicError(errCodeSERE0014,
+					firstErr = dynamicError(lexicon.ErrSERE0014,
 						"HTML output contains character U+%04X in #x7F-#x9F range", r)
 					return firstErr
 				}
@@ -825,7 +825,7 @@ func checkHTMLPIContent(doc *helium.Document) error {
 		if n.Type() == helium.ProcessingInstructionNode {
 			content := string(n.Content())
 			if strings.Contains(content, ">") {
-				err = dynamicError(errCodeSERE0015,
+				err = dynamicError(lexicon.ErrSERE0015,
 					"processing instruction content contains '>' in HTML output")
 				return err
 			}

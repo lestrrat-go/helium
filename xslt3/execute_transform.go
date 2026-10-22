@@ -635,15 +635,15 @@ func executeTransform(ctx context.Context, source *helium.Document, ss *Styleshe
 	if initialTemplateName != "" {
 		tmpl := ec.stylesheet.namedTemplates[initialTemplateName]
 		if tmpl == nil {
-			return nil, dynamicError(errCodeXTDE0820, "initial template %q not found", initialTemplateName)
+			return nil, dynamicError(lexicon.ErrXTDE0820, "initial template %q not found", initialTemplateName)
 		}
 		// XTDE0040: initial template must be public in a package context
 		if ec.stylesheet.isPackage && tmpl.Visibility != "" && tmpl.Visibility != visPublic && tmpl.Visibility != visFinal {
-			return nil, dynamicError(errCodeXTDE0040, "initial template %q is not public (visibility=%q)", initialTemplateName, tmpl.Visibility)
+			return nil, dynamicError(lexicon.ErrXTDE0040, "initial template %q is not public (visibility=%q)", initialTemplateName, tmpl.Visibility)
 		}
 		// Also check for templates with no explicit visibility in packages (default=private)
 		if ec.stylesheet.isPackage && tmpl.Visibility == "" {
-			return nil, dynamicError(errCodeXTDE0040, "initial template %q is not public", initialTemplateName)
+			return nil, dynamicError(lexicon.ErrXTDE0040, "initial template %q is not public", initialTemplateName)
 		}
 		// XTDE0060: initial template must not have any required parameters
 		// that are not supplied by the caller.
@@ -658,7 +658,7 @@ func executeTransform(ctx context.Context, source *helium.Document, ss *Styleshe
 				}
 			}
 			if !supplied {
-				return nil, dynamicError(errCodeXTDE0060, "initial template %q has required parameter $%s", initialTemplateName, p.Name)
+				return nil, dynamicError(lexicon.ErrXTDE0060, "initial template %q has required parameter $%s", initialTemplateName, p.Name)
 			}
 		}
 		// Pass caller-supplied initial-template params.
@@ -683,7 +683,7 @@ func executeTransform(ctx context.Context, source *helium.Document, ss *Styleshe
 		// A supplied initial match selection counts as input even when it remaps to
 		// empty (all nodes stripped); only error when no selection was supplied.
 		if effectiveSource == nil && !selectionSupplied {
-			return nil, dynamicError(errCodeXTDE0040, "no source document and no initial template")
+			return nil, dynamicError(lexicon.ErrXTDE0040, "no source document and no initial template")
 		}
 		var initialModeParams map[string]xpath3.Sequence
 		if cfg != nil && len(cfg.initialModeParams) > 0 {
@@ -1018,14 +1018,14 @@ func (ec *execContext) checkInitialMode(mode string) error {
 		// In packages, check if the resolved mode is public
 		if md := ec.stylesheet.modeDefs[resolvedMode]; md != nil {
 			if md.Visibility == visPrivate || md.Visibility == "" {
-				return dynamicError(errCodeXTDE0044, "initial mode %q is not public in the package", mode)
+				return dynamicError(lexicon.ErrXTDE0044, "initial mode %q is not public in the package", mode)
 			}
 			return nil
 		}
 		// For packages with declared-modes="true" (default), undeclared modes
 		// are implicitly private.
 		if ec.stylesheet.declaredModes {
-			return dynamicError(errCodeXTDE0044, "initial mode %q is not declared in the package", mode)
+			return dynamicError(lexicon.ErrXTDE0044, "initial mode %q is not declared in the package", mode)
 		}
 	} else {
 		// In non-package stylesheets, special modes are always available
@@ -1038,10 +1038,10 @@ func (ec *execContext) checkInitialMode(mode string) error {
 	// Check explicit mode visibility
 	if md := ec.stylesheet.modeDefs[mode]; md != nil {
 		if md.Visibility == visPrivate {
-			return dynamicError(errCodeXTDE0044, "initial mode %q is not public", mode)
+			return dynamicError(lexicon.ErrXTDE0044, "initial mode %q is not public", mode)
 		}
 		if ec.stylesheet.isPackage && md.Visibility == "" {
-			return dynamicError(errCodeXTDE0044, "initial mode %q is not public in the package", mode)
+			return dynamicError(lexicon.ErrXTDE0044, "initial mode %q is not public in the package", mode)
 		}
 		return nil
 	}
@@ -1049,7 +1049,7 @@ func (ec *execContext) checkInitialMode(mode string) error {
 	if len(ec.stylesheet.modeTemplates[mode]) > 0 {
 		return nil
 	}
-	return dynamicError(errCodeXTDE0045, "initial mode %q not found", mode)
+	return dynamicError(lexicon.ErrXTDE0045, "initial mode %q not found", mode)
 }
 
 func cloneSequenceMap(in map[string]xpath3.Sequence) map[string]xpath3.Sequence {

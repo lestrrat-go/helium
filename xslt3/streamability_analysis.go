@@ -1,6 +1,7 @@
 package xslt3
 
 import (
+	"github.com/lestrrat-go/helium/internal/lexicon"
 	"github.com/lestrrat-go/helium/internal/xpathstream"
 	"github.com/lestrrat-go/helium/xpath3"
 )
@@ -213,7 +214,7 @@ func checkAccAfterPreDescentInner(body []instruction) (bool, error) {
 		// is NOT checked here because attributes can be delayed.
 		if vo, ok := inst.(*valueOfInst); ok {
 			if vo.Select != nil && xpathstream.ExprUsesFunction(vo.Select, "accumulator-after") {
-				return false, staticError(errCodeXTSE3430,
+				return false, staticError(lexicon.ErrXTSE3430,
 					"accumulator-after() used in pre-descent position is not streamable")
 			}
 		}
@@ -265,7 +266,7 @@ func checkAccumulatorAfterInLRE(inst instruction) error {
 	}
 	for _, attr := range lre.Attrs {
 		if attr.Value != nil && attr.Value.hasFunction("accumulator-after") {
-			return staticError(errCodeXTSE3430,
+			return staticError(lexicon.ErrXTSE3430,
 				"accumulator-after() used in pre-descent position is not streamable")
 		}
 	}
@@ -289,7 +290,7 @@ func checkStreamableTemplateBody(ss *Stylesheet, body []instruction) error {
 			continue
 		}
 		if exprTopLevelReturnsStreamingNodes(seq.Select.AST()) {
-			return staticError(errCodeXTSE3430,
+			return staticError(lexicon.ErrXTSE3430,
 				"xsl:sequence select %q returns streaming nodes from template body, which is not streamable",
 				seq.Select.String())
 		}
@@ -305,7 +306,7 @@ func checkStreamableTemplateBody(ss *Stylesheet, body []instruction) error {
 	// body as a whole. Two sibling copy-of/value-of/apply-templates each
 	// selecting child nodes constitute two consuming reads of the stream.
 	if countDownwardInBody(ss, body) > 1 {
-		return staticError(errCodeXTSE3430,
+		return staticError(lexicon.ErrXTSE3430,
 			"template body has multiple consuming operations, which is not streamable")
 	}
 
@@ -363,7 +364,7 @@ func checkStreamableInstructionCtx(ss *Stylesheet, inst instruction, inResultDoc
 	case *applyTemplatesInst:
 		if v.Select != nil && xpathstream.ExprUsesDescendantOrSelf(v.Select) &&
 			!exprEndsWithGrounding(v.Select.AST()) {
-			return staticError(errCodeXTSE3430,
+			return staticError(lexicon.ErrXTSE3430,
 				"xsl:apply-templates with crawling select expression %q is not streamable", v.Select.String())
 		}
 	case *nextMatchInst:
@@ -374,7 +375,7 @@ func checkStreamableInstructionCtx(ss *Stylesheet, inst instruction, inResultDoc
 		for _, wp := range v.Params {
 			if wp.Select != nil {
 				if _, ok := derefXPathExpr(wp.Select.AST()).(xpath3.ContextItemExpr); ok {
-					return staticError(errCodeXTSE3430,
+					return staticError(lexicon.ErrXTSE3430,
 						"xsl:next-match with xsl:with-param select=\".\" passes streaming context item, which is not streamable")
 				}
 			}
@@ -383,7 +384,7 @@ func checkStreamableInstructionCtx(ss *Stylesheet, inst instruction, inResultDoc
 		// xsl:number without an explicit value computes numbering from node
 		// relationships, which is consuming and therefore not streamable.
 		if v.Value == nil {
-			return staticError(errCodeXTSE3430,
+			return staticError(lexicon.ErrXTSE3430,
 				"xsl:number without value is not streamable")
 		}
 	}
@@ -435,7 +436,7 @@ func checkStreamableInstructionCtx(ss *Stylesheet, inst instruction, inResultDoc
 		if fe.Select != nil && !xpathstream.ExprHasDownwardStep(fe.Select) && !xpathstream.ExprUsesDescendantOrSelf(fe.Select) {
 			// Check up-then-down: for-each navigates upward and body goes down.
 			if xpathstream.ExprUsesUpwardAxis(fe.Select) && bodyHasDownwardNavigation(fe.Body) {
-				return staticError(errCodeXTSE3430,
+				return staticError(lexicon.ErrXTSE3430,
 					"xsl:for-each select %q navigates upward and body navigates downward, which is not streamable (up-then-down)",
 					fe.Select.String())
 			}

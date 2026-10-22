@@ -4,6 +4,7 @@ import (
 	"testing"
 
 	"github.com/lestrrat-go/helium"
+	"github.com/lestrrat-go/helium/internal/lexicon"
 	"github.com/lestrrat-go/helium/xslt3"
 	"github.com/stretchr/testify/require"
 )
@@ -296,6 +297,6 @@ func TestGlobalContextItem(t *testing.T) {
 		require.NoError(t, err)
 		_, err = xslt3.NewCompiler().BaseURI(baseURI).URIResolver(resolver).Compile(ctx, doc)
 		require.Error(t, err, "element(p:foo) with p bound to urn:a vs urn:b denote different types and must raise XTSE3087")
-		require.Contains(t, err.Error(), "XTSE3087")
+		require.Contains(t, err.Error(), lexicon.ErrXTSE3087)
 	})
 }

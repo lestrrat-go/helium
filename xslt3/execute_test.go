@@ -6,6 +6,7 @@ import (
 	"testing"
 
 	"github.com/lestrrat-go/helium"
+	"github.com/lestrrat-go/helium/internal/lexicon"
 	"github.com/lestrrat-go/helium/xpath3"
 	"github.com/lestrrat-go/helium/xslt3"
 	"github.com/stretchr/testify/require"
@@ -65,7 +66,7 @@ func TestCallTemplate(t *testing.T) {
 		source := parseTransformSource(t)
 		_, err := xslt3.TransformString(t.Context(), source, ss)
 		require.Error(t, err)
-		require.Contains(t, err.Error(), "XTTE0590")
+		require.Contains(t, err.Error(), lexicon.ErrXTTE0590)
 	})
 }
 
@@ -1227,7 +1228,7 @@ func TestAttribute(t *testing.T) {
 
 		_, err = ss.Transform(src).Serialize(ctx)
 		require.Error(t, err, "undeclared prefix in computed attribute name must raise an error")
-		require.True(t, strings.Contains(err.Error(), "XTDE0860"),
+		require.True(t, strings.Contains(err.Error(), lexicon.ErrXTDE0860),
 			"expected XTDE0860, got: %v", err)
 	})
 
@@ -1261,7 +1262,7 @@ func TestAttribute(t *testing.T) {
 
 		_, err = ss.Transform(src).Serialize(ctx)
 		require.Error(t, err, "undeclared prefix in computed attribute name must raise an error")
-		require.True(t, strings.Contains(err.Error(), "XTDE0860"),
+		require.True(t, strings.Contains(err.Error(), lexicon.ErrXTDE0860),
 			"expected XTDE0860, got: %v", err)
 	})
 
@@ -1296,7 +1297,7 @@ func TestAttribute(t *testing.T) {
 
 		_, err = ss.Transform(src).Serialize(ctx)
 		require.Error(t, err, "invalid QName in computed attribute name must raise an error")
-		require.True(t, strings.Contains(err.Error(), "XTDE0850"),
+		require.True(t, strings.Contains(err.Error(), lexicon.ErrXTDE0850),
 			"expected XTDE0850, got: %v", err)
 	})
 
@@ -1329,7 +1330,7 @@ func TestAttribute(t *testing.T) {
 
 		_, err = ss.Transform(src).Serialize(ctx)
 		require.Error(t, err, "invalid QName in computed attribute name must raise an error")
-		require.True(t, strings.Contains(err.Error(), "XTDE0850"),
+		require.True(t, strings.Contains(err.Error(), lexicon.ErrXTDE0850),
 			"expected XTDE0850, got: %v", err)
 	})
 
@@ -2031,7 +2032,7 @@ func TestAttributeAfterChildContent(t *testing.T) {
 			require.NoError(t, err)
 
 			_, err = ss.Transform(src).Serialize(t.Context())
-			require.ErrorContains(t, err, "XTDE0410")
+			require.ErrorContains(t, err, lexicon.ErrXTDE0410)
 		})
 	}
 }

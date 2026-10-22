@@ -172,7 +172,7 @@ func (c *compiler) compilePattern(s string, elem *helium.Element, xpathDefaultNS
 		}
 		compiled, err := xpath3.NewCompiler().Compile(alt)
 		if err != nil {
-			return nil, staticError(errCodeXTSE0500, "invalid pattern %q: %v", alt, err)
+			return nil, staticError(lexicon.ErrXTSE0500, "invalid pattern %q: %v", alt, err)
 		}
 		// Run static validation (prefix checks) against the stylesheet
 		// namespace bindings. Use the same sanitized map the runtime evaluator
@@ -182,7 +182,7 @@ func (c *compiler) compilePattern(s string, elem *helium.Element, xpathDefaultNS
 		// This keeps compile-time and runtime prefix resolution symmetric.
 		validateNS := patternValidateNamespaces(nsBindings, xpathDefaultNS, hasXPathDefaultNS)
 		if valErr := compiled.ValidateWithSchema(validateNS, decls); valErr != nil {
-			return nil, staticError(errCodeXTSE0340, "invalid match pattern %q: %v", alt, valErr)
+			return nil, staticError(lexicon.ErrXTSE0340, "invalid match pattern %q: %v", alt, valErr)
 		}
 		ast := compiled.AST()
 		// Parenthesized predicate patterns are not allowed: (.[pred])
@@ -192,12 +192,12 @@ func (c *compiler) compilePattern(s string, elem *helium.Element, xpathDefaultNS
 			strings.HasSuffix(trimmedAlt, ")") {
 			if fe, ok := ast.(xpath3.FilterExpr); ok {
 				if _, isCtx := fe.Expr.(xpath3.ContextItemExpr); isCtx {
-					return nil, staticError(errCodeXTSE0340, "invalid match pattern %q: parenthesized predicate pattern not allowed", alt)
+					return nil, staticError(lexicon.ErrXTSE0340, "invalid match pattern %q: parenthesized predicate pattern not allowed", alt)
 				}
 			}
 		}
 		if err := validatePatternExpr(ast, nsBindings); err != nil {
-			return nil, staticError(errCodeXTSE0340, "invalid match pattern %q: %s", alt, err)
+			return nil, staticError(lexicon.ErrXTSE0340, "invalid match pattern %q: %s", alt, err)
 		}
 		// XTSE3500: current-merge-key() must not be used within a pattern.
 		if err := checkPatternForbiddenFunctions(ast, nsBindings); err != nil {
@@ -205,7 +205,7 @@ func (c *compiler) compilePattern(s string, elem *helium.Element, xpathDefaultNS
 		}
 		compiledExpr, compErr := xpath3.NewCompiler().CompileExpr(ast)
 		if compErr != nil {
-			return nil, staticError(errCodeXTSE0500, "pattern compile failed %q: %v", alt, compErr)
+			return nil, staticError(lexicon.ErrXTSE0500, "pattern compile failed %q: %v", alt, compErr)
 		}
 		pa := &patternAlt{
 			expr:         ast,
@@ -216,7 +216,7 @@ func (c *compiler) compilePattern(s string, elem *helium.Element, xpathDefaultNS
 		p.Alternatives = append(p.Alternatives, pa)
 	}
 	if len(p.Alternatives) == 0 {
-		return nil, staticError(errCodeXTSE0500, "empty pattern %q", s)
+		return nil, staticError(lexicon.ErrXTSE0500, "empty pattern %q", s)
 	}
 	collector := patternPredicateCollector{nsBindings: nsBindings}
 	for _, pa := range p.Alternatives {
@@ -232,7 +232,7 @@ func (c *compiler) compilePattern(s string, elem *helium.Element, xpathDefaultNS
 		for _, pa := range p.Alternatives {
 			if fe, ok := pa.expr.(xpath3.FilterExpr); ok {
 				if _, isCtx := fe.Expr.(xpath3.ContextItemExpr); isCtx {
-					return nil, staticError(errCodeXTSE0340,
+					return nil, staticError(lexicon.ErrXTSE0340,
 						"invalid match pattern %q: predicate pattern not allowed in union", s)
 				}
 			}
@@ -648,7 +648,7 @@ func (c *compiler) validatePatternFunctions(_ context.Context, p *pattern, sourc
 					return true
 				}
 			}
-			walkErr = staticError(errCodeXPST0017,
+			walkErr = staticError(lexicon.ErrXPST0017,
 				"unknown function %s() in match pattern %q", displayName, source)
 			return false
 		})
@@ -696,16 +696,16 @@ func checkPatternForbiddenFunctions(ast xpath3.Expr, nsBindings map[string]strin
 		}
 		switch local {
 		case "current-merge-key":
-			walkErr = staticError(errCodeXTSE3500, "current-merge-key() must not be used within a pattern")
+			walkErr = staticError(lexicon.ErrXTSE3500, "current-merge-key() must not be used within a pattern")
 			return false
 		case "current-merge-group":
-			walkErr = staticError(errCodeXTSE3470, "current-merge-group() must not be used within a pattern")
+			walkErr = staticError(lexicon.ErrXTSE3470, "current-merge-group() must not be used within a pattern")
 			return false
 		case lexicon.FnCurrentGroup:
-			walkErr = staticError(errCodeXTSE1060, "current-group() must not be used within a pattern")
+			walkErr = staticError(lexicon.ErrXTSE1060, "current-group() must not be used within a pattern")
 			return false
 		case lexicon.FnCurrentGroupingKey:
-			walkErr = staticError(errCodeXTSE1070, "current-grouping-key() must not be used within a pattern")
+			walkErr = staticError(lexicon.ErrXTSE1070, "current-grouping-key() must not be used within a pattern")
 			return false
 		}
 		return true
@@ -2301,12 +2301,12 @@ func evalStepPredicate(ctx context.Context, ec *execContext, compiled *xpath3.Ex
 // variable/param evaluation) through the exec context so they can be raised
 // after pattern matching. Every other error only makes the predicate false.
 func recordPatternPredicateError(ec *execContext, err error) {
-	if isXSLTError(err, errCodeXTDE0640) {
+	if isXSLTError(err, lexicon.ErrXTDE0640) {
 		ec.patternMatchErr = err
 		return
 	}
 	if errors.Is(err, ErrCircularRef) {
-		ec.patternMatchErr = dynamicError(errCodeXTDE0640, "%s", err.Error())
+		ec.patternMatchErr = dynamicError(lexicon.ErrXTDE0640, "%s", err.Error())
 	}
 }
 
@@ -2351,7 +2351,7 @@ func matchByEvaluation(ctx context.Context, ec *execContext, alt *patternAlt, no
 	if err != nil {
 		// Propagate fatal errors (like XTDE0640 circular key) through
 		// the exec context so they can be raised after pattern matching.
-		if isXSLTError(err, errCodeXTDE0640) {
+		if isXSLTError(err, lexicon.ErrXTDE0640) {
 			ec.patternMatchErr = err
 			return false
 		}
@@ -2364,7 +2364,7 @@ func matchByEvaluation(ctx context.Context, ec *execContext, alt *patternAlt, no
 	for ancestor := node.Parent(); ancestor != nil; ancestor = ancestor.Parent() {
 		result, err := ec.evalPatternExpr(ctx, compiled, ancestor)
 		if err != nil {
-			if isXSLTError(err, errCodeXTDE0640) {
+			if isXSLTError(err, lexicon.ErrXTDE0640) {
 				ec.patternMatchErr = err
 				return false
 			}

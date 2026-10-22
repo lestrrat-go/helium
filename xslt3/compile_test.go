@@ -11,6 +11,7 @@ import (
 	"testing"
 
 	"github.com/lestrrat-go/helium"
+	"github.com/lestrrat-go/helium/internal/lexicon"
 	"github.com/lestrrat-go/helium/xpath3"
 	"github.com/lestrrat-go/helium/xslt3"
 	"github.com/stretchr/testify/require"
@@ -380,7 +381,7 @@ func TestCompile(t *testing.T) {
 
 				_, err = xslt3.CompileStylesheet(ctx, doc)
 				require.Error(t, err)
-				require.True(t, strings.Contains(err.Error(), "XTSE0720"),
+				require.True(t, strings.Contains(err.Error(), lexicon.ErrXTSE0720),
 					"expected XTSE0720 in error, got: %v", err)
 			})
 		}
@@ -1164,7 +1165,7 @@ func TestUnionPattern(t *testing.T) {
 		_, err = ss.Transform(source).
 			OnMultipleMatch(xslt3.OnMultipleMatchFail).
 			Serialize(t.Context())
-		require.ErrorContains(t, err, "XTDE0540")
+		require.ErrorContains(t, err, lexicon.ErrXTDE0540)
 	})
 
 	// A genuine conflict between two DIFFERENT templates of equal precedence and
@@ -1184,7 +1185,7 @@ func TestUnionPattern(t *testing.T) {
 			OnMultipleMatch(xslt3.OnMultipleMatchFail).
 			Serialize(t.Context())
 		require.Error(t, err, "genuine conflict must raise XTDE0540")
-		require.Contains(t, err.Error(), "XTDE0540")
+		require.Contains(t, err.Error(), lexicon.ErrXTDE0540)
 	})
 }
 
@@ -1250,7 +1251,7 @@ func TestNamespaceFixup(t *testing.T) {
 </xsl:stylesheet>`)
 
 		_, err := xslt3.TransformString(t.Context(), parseTransformSource(t), ss)
-		require.ErrorContains(t, err, "XTDE0430")
+		require.ErrorContains(t, err, lexicon.ErrXTDE0430)
 	})
 }
 
@@ -1262,9 +1263,6 @@ func namespaceURI(elem *helium.Element, prefix string) string {
 	}
 	return ""
 }
-
-// errXTSE0670 is the error code for duplicate sibling xsl:with-param names.
-const errXTSE0670 = "XTSE0670"
 
 // XSLT 3.0 [XTSE0670]: two sibling xsl:with-param elements naming the same
 // expanded QName are a static error, whichever instruction holds them and
@@ -1279,13 +1277,13 @@ func TestDuplicateWithParam(t *testing.T) {
 		code string
 	}{
 		{name: "distinct names", body: `<xsl:call-template name="t"><xsl:with-param name="p" select="1"/><xsl:with-param name="q" select="2"/></xsl:call-template>`},
-		{name: "call-template", body: `<xsl:call-template name="t">` + dup + `</xsl:call-template>`, code: errXTSE0670},
-		{name: "apply-templates", body: `<xsl:apply-templates select="nothing">` + dup + `</xsl:apply-templates>`, code: errXTSE0670},
-		{name: "same expanded name", body: `<xsl:call-template name="t"><xsl:with-param xmlns:a="urn:x" name="a:p" select="1"/><xsl:with-param xmlns:b="urn:x" name="b:p" select="2"/></xsl:call-template>`, code: errXTSE0670},
-		{name: "tunnel", body: `<xsl:call-template name="t"><xsl:with-param name="p" select="1" tunnel="yes"/><xsl:with-param name="p" select="2" tunnel="yes"/></xsl:call-template>`, code: errXTSE0670},
-		{name: "apply-imports", body: `<xsl:if test="false()"><xsl:apply-imports>` + dup + `</xsl:apply-imports></xsl:if>`, code: errXTSE0670},
-		{name: "next-match", body: `<xsl:if test="false()"><xsl:next-match>` + dup + `</xsl:next-match></xsl:if>`, code: errXTSE0670},
-		{name: "evaluate", body: `<xsl:evaluate xpath="'1'">` + dup + `</xsl:evaluate>`, code: errXTSE0670},
+		{name: "call-template", body: `<xsl:call-template name="t">` + dup + `</xsl:call-template>`, code: lexicon.ErrXTSE0670},
+		{name: "apply-templates", body: `<xsl:apply-templates select="nothing">` + dup + `</xsl:apply-templates>`, code: lexicon.ErrXTSE0670},
+		{name: "same expanded name", body: `<xsl:call-template name="t"><xsl:with-param xmlns:a="urn:x" name="a:p" select="1"/><xsl:with-param xmlns:b="urn:x" name="b:p" select="2"/></xsl:call-template>`, code: lexicon.ErrXTSE0670},
+		{name: "tunnel", body: `<xsl:call-template name="t"><xsl:with-param name="p" select="1" tunnel="yes"/><xsl:with-param name="p" select="2" tunnel="yes"/></xsl:call-template>`, code: lexicon.ErrXTSE0670},
+		{name: "apply-imports", body: `<xsl:if test="false()"><xsl:apply-imports>` + dup + `</xsl:apply-imports></xsl:if>`, code: lexicon.ErrXTSE0670},
+		{name: "next-match", body: `<xsl:if test="false()"><xsl:next-match>` + dup + `</xsl:next-match></xsl:if>`, code: lexicon.ErrXTSE0670},
+		{name: "evaluate", body: `<xsl:evaluate xpath="'1'">` + dup + `</xsl:evaluate>`, code: lexicon.ErrXTSE0670},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {

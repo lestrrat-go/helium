@@ -5,6 +5,7 @@ import (
 	"testing"
 
 	"github.com/lestrrat-go/helium"
+	"github.com/lestrrat-go/helium/internal/lexicon"
 	"github.com/stretchr/testify/require"
 )
 
@@ -116,7 +117,7 @@ func TestExecNumberStartAt(t *testing.T) {
 		source, err := helium.NewParser().Parse(t.Context(), []byte(`<root/>`))
 		require.NoError(t, err)
 		_, err = ss.Transform(source).Serialize(t.Context())
-		require.ErrorContains(t, err, errCodeXTDE0030)
+		require.ErrorContains(t, err, lexicon.ErrXTDE0030)
 	})
 }
 

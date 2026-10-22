@@ -866,7 +866,7 @@ func (ec *execContext) addNode(node helium.Node) error {
 			if isText && !isNonWhitespaceText {
 				return nil
 			}
-			return dynamicError(errCodeXTRE1495, "cannot write to primary output: URI already used by xsl:result-document")
+			return dynamicError(lexicon.ErrXTRE1495, "cannot write to primary output: URI already used by xsl:result-document")
 		}
 		if !isText || isNonWhitespaceText {
 			ec.primaryClaimedImplicitly = true
@@ -1032,7 +1032,7 @@ func (ec *execContext) spliceConditionalSequence(placeholder helium.MutableNode,
 			case helium.AttributeNode:
 				elem, ok := parent.(*helium.Element)
 				if !ok {
-					return dynamicError(errCodeXTDE0410, "cannot add attribute to a non-element node")
+					return dynamicError(lexicon.ErrXTDE0410, "cannot add attribute to a non-element node")
 				}
 				attrNode, _ := helium.AsNode[*helium.Attribute](v.Node)
 				copyAttributeToElement(elem, attrNode)
@@ -2115,7 +2115,7 @@ func (ec *execContext) executeInstruction(ctx context.Context, inst instruction)
 		ec.defaultCollation = saved
 		return err
 	default:
-		return dynamicError(errCodeXTDE0820, "unsupported instruction type %T", inst)
+		return dynamicError(lexicon.ErrXTDE0820, "unsupported instruction type %T", inst)
 	}
 }
 
@@ -2123,7 +2123,7 @@ func (ec *execContext) executeInstruction(ctx context.Context, inst instruction)
 // If fallback instructions are present, they are executed; otherwise XTDE1450.
 func (ec *execContext) execFallback(ctx context.Context, inst *fallbackInst) error {
 	if !inst.HasFallback {
-		return dynamicError(errCodeXTDE1450,
+		return dynamicError(lexicon.ErrXTDE1450,
 			"no xsl:fallback was found for forwards-compatible instruction %s", inst.Name)
 	}
 	return ec.executeSequenceConstructor(ctx, inst.Body)

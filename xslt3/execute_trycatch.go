@@ -24,7 +24,7 @@ func (ec *execContext) execMessage(ctx context.Context, inst *messageInst) error
 			bodySeq = xpath3.ItemSlice(sequence.Materialize(result.Sequence()))
 			s, serr := serializeMessageSequence(bodySeq)
 			if serr != nil {
-				return dynamicErrorCause(errCodeSERE0006, serr,
+				return dynamicErrorCause(lexicon.ErrSERE0006, serr,
 					"xsl:message content could not be serialized: %s", serr)
 			}
 			value = s
@@ -43,7 +43,7 @@ func (ec *execContext) execMessage(ctx context.Context, inst *messageInst) error
 		}
 		if err != nil {
 			// XTDE1480 is a fatal error, not recoverable.
-			if isXSLTError(err, errCodeXTDE1480) {
+			if isXSLTError(err, lexicon.ErrXTDE1480) {
 				return err
 			}
 			// Other errors evaluating message body are recoverable
@@ -52,7 +52,7 @@ func (ec *execContext) execMessage(ctx context.Context, inst *messageInst) error
 			bodySeq = append(bodySeq, sequence.Materialize(val)...)
 			s, serr := serializeMessageSequence(val)
 			if serr != nil {
-				return dynamicErrorCause(errCodeSERE0006, serr,
+				return dynamicErrorCause(lexicon.ErrSERE0006, serr,
 					"xsl:message content could not be serialized: %s", serr)
 			}
 			value += s
@@ -73,7 +73,7 @@ func (ec *execContext) execMessage(ctx context.Context, inst *messageInst) error
 			terminate = false
 		default:
 			// XTDE0030: avt value is not a valid xs:boolean
-			return dynamicError(errCodeXTDE0030,
+			return dynamicError(lexicon.ErrXTDE0030,
 				"xsl:message/@terminate value %q is not a valid boolean (yes|no|true|false|1|0)", termStr)
 		}
 	}
@@ -85,7 +85,7 @@ func (ec *execContext) execMessage(ctx context.Context, inst *messageInst) error
 	}
 
 	if terminate {
-		errorCode := errCodeXTMM9000
+		errorCode := lexicon.ErrXTMM9000
 		if inst.ErrorCode != nil {
 			code, err := inst.ErrorCode.evaluate(ctx, ec.contextNode)
 			if err == nil && code != "" {
@@ -222,7 +222,7 @@ func (ec *execContext) execTryCatch(ctx context.Context, inst *tryCatchInst) err
 	// Per spec: "the result of any attempt to catch the error using an
 	// xsl:try instruction is implementation-dependent."
 	if tryErr != nil && errors.Is(tryErr, ErrCircularRef) {
-		return dynamicError(errCodeXTDE0640, "%s", tryErr.Error())
+		return dynamicError(lexicon.ErrXTDE0640, "%s", tryErr.Error())
 	}
 
 	// xsl:break and xsl:next-iteration are control flow signals, not errors.
@@ -267,7 +267,7 @@ func (ec *execContext) execTryCatch(ctx context.Context, inst *tryCatchInst) err
 	// Unwrap wrapper errors (e.g., avt XTDE0045 wrapping FOAR0001) to find
 	// the most specific XPath/XSLT error code for catch clause matching.
 	errNS := lexicon.NamespaceErr
-	errCode := errCodeXSLT0000
+	errCode := lexicon.ErrXSLT0000
 	errDesc := tryErr.Error()
 	var errQName xpath3.QNameValue
 	if xErr, ok := errors.AsType[*XSLTError](tryErr); ok {
@@ -408,7 +408,7 @@ func (ec *execContext) execTryCatchNoRollback(ctx context.Context, inst *tryCatc
 
 	// XTDE3530: output was written and cannot be rolled back.
 	if out.outputSerial != snapSerial {
-		return dynamicError(errCodeXTDE3530,
+		return dynamicError(lexicon.ErrXTDE3530,
 			"xsl:try with rollback-output='no': output was written before error and cannot be rolled back")
 	}
 
@@ -417,7 +417,7 @@ func (ec *execContext) execTryCatchNoRollback(ctx context.Context, inst *tryCatc
 	defer ec.popVarScope()
 
 	errNS := lexicon.NamespaceErr
-	errCode := errCodeXSLT0000
+	errCode := lexicon.ErrXSLT0000
 	errDesc := tryErr.Error()
 	var errQName xpath3.QNameValue
 	if xErr, ok := errors.AsType[*XSLTError](tryErr); ok {

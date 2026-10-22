@@ -7,6 +7,7 @@ import (
 	"testing"
 
 	"github.com/lestrrat-go/helium"
+	"github.com/lestrrat-go/helium/internal/lexicon"
 	"github.com/lestrrat-go/helium/xslt3"
 	"github.com/stretchr/testify/require"
 )
@@ -277,17 +278,17 @@ func TestOverrideTemplateStaticErrors(t *testing.T) {
 	}{
 		{name: "valid", template: `<xsl:template match="a" mode="m" priority="-1.5">[ok]</xsl:template>`},
 		{name: "priority with surrounding whitespace", template: `<xsl:template match="a" mode="m" priority=" 2 ">[ok]</xsl:template>`},
-		{name: "priority with exponent", template: `<xsl:template match="a" mode="m" priority="1e3">[p]</xsl:template>`, code: "XTSE0530"},
-		{name: "priority with trailing text", template: `<xsl:template match="a" mode="m" priority="0.5x">[p]</xsl:template>`, code: "XTSE0530"},
-		{name: "unknown attribute", template: `<xsl:template match="a" mode="m" bogus="1">[p]</xsl:template>`, code: "XTSE0090"},
-		{name: "neither match nor name", template: `<xsl:template mode="m">[p]</xsl:template>`, code: "XTSE0500"},
-		{name: "mode without match", template: `<xsl:template name="t" mode="m">[p]</xsl:template>`, code: "XTSE0500"},
-		{name: "priority without match", template: `<xsl:template name="t" priority="1">[p]</xsl:template>`, code: "XTSE0500"},
-		{name: "visibility without name", template: `<xsl:template match="a" mode="m" visibility="public">[p]</xsl:template>`, code: "XTSE0500"},
-		{name: "empty mode", template: `<xsl:template match="a" mode="">[p]</xsl:template>`, code: "XTSE0550"},
-		{name: "duplicate mode", template: `<xsl:template match="a" mode="m m">[p]</xsl:template>`, code: "XTSE0550"},
-		{name: "invalid name", template: `<xsl:template name="1t">[p]</xsl:template>`, code: "XTSE0020"},
-		{name: "unknown function in pattern", template: `<xsl:template match="a[no-such-function()]" mode="m">[p]</xsl:template>`, code: "XPST0017"},
+		{name: "priority with exponent", template: `<xsl:template match="a" mode="m" priority="1e3">[p]</xsl:template>`, code: lexicon.ErrXTSE0530},
+		{name: "priority with trailing text", template: `<xsl:template match="a" mode="m" priority="0.5x">[p]</xsl:template>`, code: lexicon.ErrXTSE0530},
+		{name: "unknown attribute", template: `<xsl:template match="a" mode="m" bogus="1">[p]</xsl:template>`, code: lexicon.ErrXTSE0090},
+		{name: "neither match nor name", template: `<xsl:template mode="m">[p]</xsl:template>`, code: lexicon.ErrXTSE0500},
+		{name: "mode without match", template: `<xsl:template name="t" mode="m">[p]</xsl:template>`, code: lexicon.ErrXTSE0500},
+		{name: "priority without match", template: `<xsl:template name="t" priority="1">[p]</xsl:template>`, code: lexicon.ErrXTSE0500},
+		{name: "visibility without name", template: `<xsl:template match="a" mode="m" visibility="public">[p]</xsl:template>`, code: lexicon.ErrXTSE0500},
+		{name: "empty mode", template: `<xsl:template match="a" mode="">[p]</xsl:template>`, code: lexicon.ErrXTSE0550},
+		{name: "duplicate mode", template: `<xsl:template match="a" mode="m m">[p]</xsl:template>`, code: lexicon.ErrXTSE0550},
+		{name: "invalid name", template: `<xsl:template name="1t">[p]</xsl:template>`, code: lexicon.ErrXTSE0020},
+		{name: "unknown function in pattern", template: `<xsl:template match="a[no-such-function()]" mode="m">[p]</xsl:template>`, code: lexicon.ErrXPST0017},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
@@ -325,9 +326,6 @@ const overrideDuplicatesPackage = `<?xml version="1.0"?>
   <xsl:attribute-set name="s" visibility="public"><xsl:attribute name="x">1</xsl:attribute></xsl:attribute-set>
 </xsl:package>`
 
-// errXTSE3055 is the error code for homonymous overriding declarations.
-const errXTSE3055 = "XTSE3055"
-
 // XSLT 3.0 §3.5.3.2 (XTSE3055): a declaration inside xsl:override must not be
 // homonymous with any other overriding declaration of the using package,
 // whether both sit in the same xsl:use-package or in two of them.
@@ -354,41 +352,41 @@ func TestOverrideDuplicateDeclarations(t *testing.T) {
 			first:       `<xsl:template name="t">[1]</xsl:template>`,
 			second:      `<xsl:template name="t">[2]</xsl:template>`,
 			samePackage: true,
-			code:        errXTSE3055,
+			code:        lexicon.ErrXTSE3055,
 		},
 		{
 			name:        "variable twice",
 			first:       `<xsl:variable name="v" select="2"/>`,
 			second:      `<xsl:variable name="v" select="3"/>`,
 			samePackage: true,
-			code:        errXTSE3055,
+			code:        lexicon.ErrXTSE3055,
 		},
 		{
 			name:        "param twice",
 			first:       `<xsl:param name="p" select="2"/>`,
 			second:      `<xsl:param name="p" select="3"/>`,
 			samePackage: true,
-			code:        errXTSE3055,
+			code:        lexicon.ErrXTSE3055,
 		},
 		{
 			name:        "attribute set twice",
 			first:       `<xsl:attribute-set name="s"><xsl:attribute name="x">2</xsl:attribute></xsl:attribute-set>`,
 			second:      `<xsl:attribute-set name="s"><xsl:attribute name="x">3</xsl:attribute></xsl:attribute-set>`,
 			samePackage: true,
-			code:        errXTSE3055,
+			code:        lexicon.ErrXTSE3055,
 		},
 		{
 			name:   "template in two used packages",
 			first:  `<xsl:template name="t">[1]</xsl:template>`,
 			second: `<xsl:template name="t">[2]</xsl:template>`,
-			code:   errXTSE3055,
+			code:   lexicon.ErrXTSE3055,
 		},
 		{
 			name:        "variable and param with one name",
 			first:       `<xsl:variable name="v" select="2"/>`,
 			second:      `<xsl:param name="v" select="3"/>`,
 			samePackage: true,
-			code:        errXTSE3055,
+			code:        lexicon.ErrXTSE3055,
 		},
 		{
 			name:        "second template excluded by use-when",
@@ -400,7 +398,7 @@ func TestOverrideDuplicateDeclarations(t *testing.T) {
 			name:   "param in two used packages",
 			first:  `<xsl:param name="p" select="2"/>`,
 			second: `<xsl:param name="p" select="3"/>`,
-			code:   errXTSE3055,
+			code:   lexicon.ErrXTSE3055,
 		},
 	}
 	for _, tc := range cases {

@@ -25,7 +25,7 @@ func (ec *execContext) fnElementAvailable(_ context.Context, args []xpath3.Seque
 
 	// XTDE1440: element name must be a valid QName or EQName
 	if !strings.HasPrefix(name, "Q{") && !xmlchar.IsValidQName(name) {
-		return nil, dynamicError(errCodeXTDE1440,
+		return nil, dynamicError(lexicon.ErrXTDE1440,
 			"element-available: %q is not a valid EQName", name)
 	}
 
@@ -46,7 +46,7 @@ func (ec *execContext) fnElementAvailable(_ context.Context, args []xpath3.Seque
 		}
 		// XTDE1440: prefix has no namespace declaration
 		if !resolved {
-			return nil, dynamicError(errCodeXTDE1440,
+			return nil, dynamicError(lexicon.ErrXTDE1440,
 				"element-available: prefix %q has no namespace declaration", prefix)
 		}
 	}
@@ -77,7 +77,7 @@ func (ec *execContext) fnFunctionAvailable(_ context.Context, args []xpath3.Sequ
 
 	// XTDE1400: function name must be a valid QName or EQName
 	if !strings.HasPrefix(name, "Q{") && !xmlchar.IsValidQName(name) {
-		return nil, dynamicError(errCodeXTDE1400,
+		return nil, dynamicError(lexicon.ErrXTDE1400,
 			"function-available: %q is not a valid QName", name)
 	}
 
@@ -130,7 +130,7 @@ func (ec *execContext) fnFunctionAvailable(_ context.Context, args []xpath3.Sequ
 		uri, ok := ec.stylesheet.namespaces[prefix]
 		if !ok {
 			// XTDE1400: undeclared namespace prefix in function name
-			return nil, dynamicError(errCodeXTDE1400,
+			return nil, dynamicError(lexicon.ErrXTDE1400,
 				"undeclared namespace prefix %q in function-available(%q)", prefix, name)
 		}
 		qn := xpath3.QualifiedName{URI: uri, Name: local}
@@ -179,7 +179,7 @@ func (ec *execContext) fnTypeAvailable(_ context.Context, args []xpath3.Sequence
 
 	// XTDE1428: type name must be a valid QName or EQName
 	if !strings.HasPrefix(name, "Q{") && !xmlchar.IsValidQName(name) {
-		return nil, dynamicError(errCodeXTDE1428,
+		return nil, dynamicError(lexicon.ErrXTDE1428,
 			"type-available: %q is not a valid EQName", name)
 	}
 
@@ -188,7 +188,7 @@ func (ec *execContext) fnTypeAvailable(_ context.Context, args []xpath3.Sequence
 		if prefix, _, ok := strings.Cut(name, ":"); ok {
 			if prefix != "xs" && prefix != lexicon.PrefixXSD {
 				if _, ok := ec.stylesheet.namespaces[prefix]; !ok {
-					return nil, dynamicError(errCodeXTDE1428,
+					return nil, dynamicError(lexicon.ErrXTDE1428,
 						"type-available: prefix %q has no namespace declaration", prefix)
 				}
 			}
@@ -252,7 +252,7 @@ func (ec *execContext) fnTypeAvailable(_ context.Context, args []xpath3.Sequence
 // current-group() returns the items in the current group during for-each-group.
 func (ec *execContext) fnCurrentGroup(_ context.Context, _ []xpath3.Sequence) (xpath3.Sequence, error) {
 	if !ec.inGroupContext {
-		return nil, dynamicError(errCodeXTDE1061, "current-group() called outside xsl:for-each-group")
+		return nil, dynamicError(lexicon.ErrXTDE1061, "current-group() called outside xsl:for-each-group")
 	}
 	if ec.currentGroup != nil {
 		return ec.currentGroup, nil
@@ -266,10 +266,10 @@ func (ec *execContext) fnCurrentGroup(_ context.Context, _ []xpath3.Sequence) (x
 // not establish a grouping key), or when called outside xsl:for-each-group.
 func (ec *execContext) fnCurrentGroupingKey(_ context.Context, _ []xpath3.Sequence) (xpath3.Sequence, error) {
 	if !ec.inGroupContext {
-		return nil, dynamicError(errCodeXTDE1071, "current-grouping-key() called outside xsl:for-each-group")
+		return nil, dynamicError(lexicon.ErrXTDE1071, "current-grouping-key() called outside xsl:for-each-group")
 	}
 	if !ec.groupHasKey {
-		return nil, dynamicError(errCodeXTDE1071, "current-grouping-key() called within xsl:for-each-group that uses group-starting-with or group-ending-with")
+		return nil, dynamicError(lexicon.ErrXTDE1071, "current-grouping-key() called within xsl:for-each-group that uses group-starting-with or group-ending-with")
 	}
 	if ec.currentGroupKey != nil {
 		return ec.currentGroupKey, nil
@@ -282,7 +282,7 @@ func (ec *execContext) fnCurrentGroupingKey(_ context.Context, _ []xpath3.Sequen
 // is registered so that function-available() reports the function.
 func (ec *execContext) fnCurrentMergeGroup(_ context.Context, _ []xpath3.Sequence) (xpath3.Sequence, error) {
 	if !ec.inMergeAction {
-		return nil, dynamicError(errCodeXTDE3480, "current-merge-group() called outside xsl:merge-action")
+		return nil, dynamicError(lexicon.ErrXTDE3480, "current-merge-group() called outside xsl:merge-action")
 	}
 	return xpath3.EmptySequence(), nil
 }
@@ -291,7 +291,7 @@ func (ec *execContext) fnCurrentMergeGroup(_ context.Context, _ []xpath3.Sequenc
 // See fnCurrentMergeGroup comment.
 func (ec *execContext) fnCurrentMergeKey(_ context.Context, _ []xpath3.Sequence) (xpath3.Sequence, error) {
 	if !ec.inMergeAction {
-		return nil, dynamicError(errCodeXTDE3510, "current-merge-key() called outside xsl:merge-action")
+		return nil, dynamicError(lexicon.ErrXTDE3510, "current-merge-key() called outside xsl:merge-action")
 	}
 	return xpath3.EmptySequence(), nil
 }
@@ -320,7 +320,7 @@ func (ec *execContext) accumulatorLookup(
 	}
 	// XTDE3340: validate the name is a valid EQName
 	if !xmlchar.IsValidQName(name) && !isValidEQName(name) {
-		return nil, dynamicError(errCodeXTDE3340, "%q is not a valid EQName for %s", name, fnName)
+		return nil, dynamicError(lexicon.ErrXTDE3340, "%q is not a valid EQName for %s", name, fnName)
 	}
 	name = resolveQName(name, ec.stylesheet.namespaces)
 	if err := ec.checkAccumulatorAccess(name); err != nil {
@@ -330,7 +330,7 @@ func (ec *execContext) accumulatorLookup(
 	// via a dynamic function reference because the captured context does not
 	// reflect the node currently being processed.
 	if xpath3.IsDynamicCall(ctx) && ec.isStreamableMode() {
-		return nil, dynamicError(errCodeXTDE3350, "%s called via dynamic reference in streaming mode", fnName)
+		return nil, dynamicError(lexicon.ErrXTDE3350, "%s called via dynamic reference in streaming mode", fnName)
 	}
 	// XTTE3360: context item must be a node (not atomic), and not an attribute
 	// or namespace node. Use the XPath function context node (which reflects
@@ -341,12 +341,12 @@ func (ec *execContext) accumulatorLookup(
 		xpathNode = ec.contextNode
 	}
 	if !ec.evaluatingAccumulator && xpathNode == nil {
-		return nil, dynamicError(errCodeXTTE3360, "%s requires context to be a node", fnName)
+		return nil, dynamicError(lexicon.ErrXTTE3360, "%s requires context to be a node", fnName)
 	}
 	if !ec.evaluatingAccumulator && !isNilNode(xpathNode) {
 		nt := xpathNode.Type()
 		if nt == helium.AttributeNode || nt == helium.NamespaceDeclNode {
-			return nil, dynamicError(errCodeXTTE3360, "%s cannot be called on an attribute or namespace node", fnName)
+			return nil, dynamicError(lexicon.ErrXTTE3360, "%s cannot be called on an attribute or namespace node", fnName)
 		}
 	}
 	stateKey := ec.accumulatorStateKey(name)
@@ -435,7 +435,7 @@ func (ec *execContext) isStreamableMode() bool {
 func (ec *execContext) checkAccumulatorAccess(name string) error {
 	// XTDE3340: the name must correspond to a declared accumulator.
 	if _, ok := ec.effectiveAccumulators()[name]; !ok {
-		return dynamicError(errCodeXTDE3340, "no accumulator %q is declared in this stylesheet", name)
+		return dynamicError(lexicon.ErrXTDE3340, "no accumulator %q is declared in this stylesheet", name)
 	}
 	// Document-level accumulator applicability (XTDE3362).
 	// This check must be performed even during accumulator evaluation
@@ -443,7 +443,7 @@ func (ec *execContext) checkAccumulatorAccess(name string) error {
 	// (e.g. one not listed in use-accumulators) is rejected.
 	if ec.activeAccumulators != nil {
 		if _, ok := ec.activeAccumulators[name]; !ok {
-			return dynamicError(errCodeXTDE3362, "accumulator %q is not applicable in the current source-document", name)
+			return dynamicError(lexicon.ErrXTDE3362, "accumulator %q is not applicable in the current source-document", name)
 		}
 	}
 	if ec.evaluatingAccumulator {
@@ -458,7 +458,7 @@ func (ec *execContext) checkAccumulatorAccess(name string) error {
 			// all accumulators allowed
 		case "":
 			// use-accumulators="" means NO accumulators allowed
-			return dynamicError(errCodeXTDE3362,
+			return dynamicError(lexicon.ErrXTDE3362,
 				"accumulator %q is not applicable in mode %q (use-accumulators is empty)", name, ec.currentMode)
 		default:
 			allowed := make(map[string]struct{})
@@ -466,7 +466,7 @@ func (ec *execContext) checkAccumulatorAccess(name string) error {
 				allowed[n] = struct{}{}
 			}
 			if _, ok := allowed[name]; !ok {
-				return dynamicError(errCodeXTDE3362,
+				return dynamicError(lexicon.ErrXTDE3362,
 					"accumulator %q is not applicable in mode %q (not in use-accumulators)", name, ec.currentMode)
 			}
 		}
@@ -478,7 +478,7 @@ func (ec *execContext) checkAccumulatorAccess(name string) error {
 	if !ok || def.Streamable {
 		return nil
 	}
-	return dynamicError(errCodeXTDE3362, "accumulator %q is not streamable", name)
+	return dynamicError(lexicon.ErrXTDE3362, "accumulator %q is not streamable", name)
 }
 
 // ensureAccumulatorStates lazily computes accumulator states for the document

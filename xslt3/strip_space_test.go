@@ -8,6 +8,7 @@ import (
 
 	"github.com/lestrrat-go/helium"
 	"github.com/lestrrat-go/helium/enum"
+	"github.com/lestrrat-go/helium/internal/lexicon"
 	"github.com/lestrrat-go/helium/xpath3"
 	"github.com/lestrrat-go/helium/xslt3"
 	"github.com/stretchr/testify/require"
@@ -153,7 +154,7 @@ func TestStripSpace(t *testing.T) {
 
 		_, err = xslt3.NewCompiler().Compile(t.Context(), doc)
 		require.Error(t, err, "same-precedence strip/preserve conflict must raise XTSE0270")
-		require.Contains(t, err.Error(), "XTSE0270")
+		require.Contains(t, err.Error(), lexicon.ErrXTSE0270)
 	})
 
 	// TestStripSpaceLowerPrecedenceConflictNotMasked verifies that a genuine
@@ -195,7 +196,7 @@ func TestStripSpace(t *testing.T) {
 			Compile(t.Context(), doc)
 		require.Error(t, err,
 			"same-precedence strip/preserve conflict over \"a\" must still raise XTSE0270 despite an unrelated higher-precedence strip-space for \"b\"")
-		require.Contains(t, err.Error(), "XTSE0270")
+		require.Contains(t, err.Error(), lexicon.ErrXTSE0270)
 	})
 
 	// TestStripSpaceHigherPrecedenceCoversConflict verifies that a genuine
@@ -273,7 +274,7 @@ func TestStripSpace(t *testing.T) {
 			Compile(t.Context(), doc)
 		require.Error(t, err,
 			"higher-precedence strip-space=\"b\" does not cover \"a\"; the \"a\" overlap must still raise XTSE0270")
-		require.Contains(t, err.Error(), "XTSE0270")
+		require.Contains(t, err.Error(), lexicon.ErrXTSE0270)
 	})
 
 	// TestStripSpacePrefixNamespaceContext verifies that a prefixed element name in
@@ -372,7 +373,7 @@ func TestStripSpace(t *testing.T) {
 			URIResolver(resolver).
 			Compile(t.Context(), doc)
 		require.Error(t, err, "undeclared prefix in strip-space elements must raise XTSE0280")
-		require.Contains(t, err.Error(), "XTSE0280")
+		require.Contains(t, err.Error(), lexicon.ErrXTSE0280)
 	})
 
 	// TestStripSpaceWildcardKindsNoConflict verifies that strip/preserve NameTests
@@ -440,7 +441,7 @@ func TestStripSpace(t *testing.T) {
 
 		_, err = xslt3.NewCompiler().Compile(t.Context(), doc)
 		require.Error(t, err, "same-kind same-name wildcard conflict must raise XTSE0270")
-		require.Contains(t, err.Error(), "XTSE0270")
+		require.Contains(t, err.Error(), lexicon.ErrXTSE0270)
 	})
 
 	// TestStripSpaceWildcardOverlapConflict verifies that a namespace wildcard
@@ -485,7 +486,7 @@ func TestStripSpace(t *testing.T) {
 				_, err = xslt3.NewCompiler().Compile(t.Context(), doc)
 				require.Error(t, err,
 					"equal-priority overlapping wildcards strip=%q preserve=%q must raise a static XTSE0270", tc.strip, tc.preserve)
-				require.Contains(t, err.Error(), "XTSE0270")
+				require.Contains(t, err.Error(), lexicon.ErrXTSE0270)
 			})
 		}
 	})

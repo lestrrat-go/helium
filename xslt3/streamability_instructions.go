@@ -21,7 +21,7 @@ func checkMultipleDownwardInst(ss *Stylesheet, inst instruction) error {
 		for _, branch := range v.Branches {
 			branchDown := countDownwardInInstructions(ss, branch)
 			if branchDown > 1 {
-				return staticError(errCodeXTSE3430,
+				return staticError(lexicon.ErrXTSE3430,
 					"xsl:fork branch has multiple consuming operations, which is not streamable")
 			}
 		}
@@ -51,7 +51,7 @@ func checkMultipleDownwardInst(ss *Stylesheet, inst instruction) error {
 			}
 		}
 		if consumingBranches > 1 && hasStreamingReturn {
-			return staticError(errCodeXTSE3430,
+			return staticError(lexicon.ErrXTSE3430,
 				"xsl:fork with multiple consuming branches returns streamed nodes, which is not streamable")
 		}
 
@@ -59,7 +59,7 @@ func checkMultipleDownwardInst(ss *Stylesheet, inst instruction) error {
 		// Within xsl:iterate body, check for multiple downward selections.
 		bodyDown := countDownwardInInstructions(ss, v.Body)
 		if bodyDown > 1 {
-			return staticError(errCodeXTSE3430,
+			return staticError(lexicon.ErrXTSE3430,
 				"xsl:iterate body has multiple downward selections, which is not streamable")
 		}
 
@@ -68,7 +68,7 @@ func checkMultipleDownwardInst(ss *Stylesheet, inst instruction) error {
 			if seq, ok := bi.(*xslSequenceInst); ok && seq.Select != nil {
 				ast := seq.Select.AST()
 				if _, ok := ast.(xpath3.ContextItemExpr); ok {
-					return staticError(errCodeXTSE3430,
+					return staticError(lexicon.ErrXTSE3430,
 						"xsl:iterate body returns streamed nodes via xsl:sequence select=\".\", which is not streamable")
 				}
 			}
@@ -84,7 +84,7 @@ func checkMultipleDownwardInst(ss *Stylesheet, inst instruction) error {
 			// for-each-group in streaming: multiple consuming uses of current-group()
 			groupRefs := countCurrentGroupConsumingRefs(v.Body)
 			if groupRefs > 1 {
-				return staticError(errCodeXTSE3430,
+				return staticError(lexicon.ErrXTSE3430,
 					"xsl:for-each-group body has multiple consuming references to current-group(), which is not streamable")
 			}
 
@@ -96,7 +96,7 @@ func checkMultipleDownwardInst(ss *Stylesheet, inst instruction) error {
 						continue
 					}
 					if countDownwardFromCurrentGroup(expr.AST()) > 1 {
-						return staticError(errCodeXTSE3430,
+						return staticError(lexicon.ErrXTSE3430,
 							"xsl:for-each-group body has multiple downward selections from current-group(), which is not streamable")
 					}
 				}
@@ -107,7 +107,7 @@ func checkMultipleDownwardInst(ss *Stylesheet, inst instruction) error {
 								continue
 							}
 							if countDownwardFromCurrentGroup(expr.AST()) > 1 {
-								return staticError(errCodeXTSE3430,
+								return staticError(lexicon.ErrXTSE3430,
 									"xsl:for-each-group body has multiple downward selections from current-group(), which is not streamable")
 							}
 						}
@@ -170,7 +170,7 @@ func checkMultipleDownwardInst(ss *Stylesheet, inst instruction) error {
 				}
 			}
 			if bodyUsesContextDown && bodyUsesCurrentGroupConsuming {
-				return staticError(errCodeXTSE3430,
+				return staticError(lexicon.ErrXTSE3430,
 					"xsl:for-each-group body uses both context item (downward) and current-group(), which is not streamable")
 			}
 
@@ -217,7 +217,7 @@ func checkApplyTemplatesCurrentGroup(ss *Stylesheet, body []instruction) error {
 							continue
 						}
 						if bodyUsesCurrentGroupOutsideFEG(tmpl.Body) {
-							return staticError(errCodeXTSE3430,
+							return staticError(lexicon.ErrXTSE3430,
 								"xsl:apply-templates select=\"current-group()\" targets streaming mode %q whose templates use current-group(), which is not streamable",
 								modeName)
 						}
@@ -302,7 +302,7 @@ func checkUseAttributeSetsStreamable(ss *Stylesheet, inst instruction) error {
 		for _, attrInst := range asDef.Attrs {
 			for _, expr := range getInstructionExprs(attrInst) {
 				if err := checkStreamableExpr(ss, expr); err != nil {
-					return staticError(errCodeXTSE3430,
+					return staticError(lexicon.ErrXTSE3430,
 						"attribute set %q is not streamable: %s", asDef.Name, err.Error())
 				}
 			}
@@ -312,7 +312,7 @@ func checkUseAttributeSetsStreamable(ss *Stylesheet, inst instruction) error {
 		// is non-streamable (the attribute set would consume the stream).
 		asDown := countAttributeSetDownward(ss, asDef)
 		if asDown > 0 {
-			return staticError(errCodeXTSE3430,
+			return staticError(lexicon.ErrXTSE3430,
 				"use-attribute-sets %q has downward navigation, which is not streamable", name)
 		}
 
@@ -325,7 +325,7 @@ func checkUseAttributeSetsStreamable(ss *Stylesheet, inst instruction) error {
 			for _, attrInst := range used.Attrs {
 				for _, expr := range getInstructionExprs(attrInst) {
 					if err := checkStreamableExpr(ss, expr); err != nil {
-						return staticError(errCodeXTSE3430,
+						return staticError(lexicon.ErrXTSE3430,
 							"attribute set %q is not streamable: %s", usedName, err.Error())
 					}
 				}
@@ -371,7 +371,7 @@ func checkForEachStreamable(_ *Stylesheet, inst instruction, inResultDoc bool) e
 		if v.Select != nil && xpathstream.ExprUsesDescendantOrSelf(v.Select) &&
 			!exprEndsWithGrounding(v.Select.AST()) {
 			if forEachBodyConsumesContext(v.Body) {
-				return staticError(errCodeXTSE3430,
+				return staticError(lexicon.ErrXTSE3430,
 					"xsl:for-each with crawling select expression %q and consuming body is not streamable", v.Select.String())
 			}
 		}
@@ -383,7 +383,7 @@ func checkForEachStreamable(_ *Stylesheet, inst instruction, inResultDoc bool) e
 				if seq, ok := bi.(*xslSequenceInst); ok && seq.Select != nil {
 					ast := seq.Select.AST()
 					if _, ok := ast.(xpath3.ContextItemExpr); ok {
-						return staticError(errCodeXTSE3430,
+						return staticError(lexicon.ErrXTSE3430,
 							"xsl:for-each body returns streamed nodes via xsl:sequence select=\".\", which is not streamable")
 					}
 				}
@@ -489,7 +489,7 @@ func checkVarConsumingInBody(streamingVars map[string]struct{}, body []instructi
 			}
 			for varName := range streamingVars {
 				if exprUsesVarConsumingly(expr, varName) {
-					return staticError(errCodeXTSE3430,
+					return staticError(lexicon.ErrXTSE3430,
 						"variable $%s bound to streaming context is used consumingly in a loop, which is not streamable", varName)
 				}
 			}
@@ -526,7 +526,7 @@ func checkForEachGroupStreamable(_ *Stylesheet, inst instruction) error {
 	// When the select is grounded (copy-of/snapshot), items are in memory and
 	// sorting is fine.
 	if len(fg.Sort) > 0 && !selectGrounded {
-		return staticError(errCodeXTSE3430,
+		return staticError(lexicon.ErrXTSE3430,
 			"xsl:for-each-group with sort is not streamable")
 	}
 
@@ -540,11 +540,11 @@ func checkForEachGroupStreamable(_ *Stylesheet, inst instruction) error {
 	selectMaterialized := selectGrounded || (fg.Select != nil && exprUsesCurrentGroup(fg.Select))
 	if !selectMaterialized {
 		if fg.GroupStartingWith != nil && patternHasNonMotionlessPredicate(fg.GroupStartingWith) {
-			return staticError(errCodeXTSE3430,
+			return staticError(lexicon.ErrXTSE3430,
 				"xsl:for-each-group group-starting-with pattern has a non-motionless predicate, which is not streamable")
 		}
 		if fg.GroupEndingWith != nil && patternHasNonMotionlessPredicate(fg.GroupEndingWith) {
-			return staticError(errCodeXTSE3430,
+			return staticError(lexicon.ErrXTSE3430,
 				"xsl:for-each-group group-ending-with pattern has a non-motionless predicate, which is not streamable")
 		}
 	}
@@ -553,12 +553,12 @@ func checkForEachGroupStreamable(_ *Stylesheet, inst instruction) error {
 	// when the select is NOT grounded, because grounded items can be navigated.
 	if !selectGrounded {
 		if fg.GroupBy != nil && xpathstream.ExprHasDownwardStep(fg.GroupBy) {
-			return staticError(errCodeXTSE3430,
+			return staticError(lexicon.ErrXTSE3430,
 				"xsl:for-each-group group-by expression %q navigates downward, which is not streamable",
 				fg.GroupBy.String())
 		}
 		if fg.GroupAdjacent != nil && xpathstream.ExprHasDownwardStep(fg.GroupAdjacent) {
-			return staticError(errCodeXTSE3430,
+			return staticError(lexicon.ErrXTSE3430,
 				"xsl:for-each-group group-adjacent expression %q navigates downward, which is not streamable",
 				fg.GroupAdjacent.String())
 		}
@@ -571,7 +571,7 @@ func checkForEachGroupStreamable(_ *Stylesheet, inst instruction) error {
 	if !selectGrounded && fg.Select != nil && xpathstream.ExprUsesDescendantOrSelf(fg.Select) {
 		groupRefs := countCurrentGroupConsumingRefs(fg.Body)
 		if groupRefs > 0 {
-			return staticError(errCodeXTSE3430,
+			return staticError(lexicon.ErrXTSE3430,
 				"xsl:for-each-group with crawling select and consuming use of current-group() is not streamable")
 		}
 	}
@@ -586,7 +586,7 @@ func checkForEachGroupStreamable(_ *Stylesheet, inst instruction) error {
 						// Nested for-each-group selecting from current-group() is consuming
 						cgRefs := countCurrentGroupConsumingRefs(innerFg.Body)
 						if cgRefs > 0 {
-							return staticError(errCodeXTSE3430,
+							return staticError(lexicon.ErrXTSE3430,
 								"nested xsl:for-each-group consuming current-group() is not streamable")
 						}
 					}
@@ -621,7 +621,7 @@ func checkSourceDocCurrentGroup(body []instruction) error {
 	for _, bi := range body {
 		if sd, ok := bi.(*sourceDocumentInst); ok && sd.Streamable {
 			if sourceDocBodyUsesCurrentGroup(sd.Body) {
-				return staticError(errCodeXTSE3430,
+				return staticError(lexicon.ErrXTSE3430,
 					"xsl:source-document streamable body uses current-group() from outer for-each-group, which is not streamable")
 			}
 		}
@@ -700,7 +700,7 @@ func checkFocusChangingCurrentGroupInst(inst instruction) error {
 		// context item, which is the normal streaming case.
 		if v.Select != nil && !exprIsContextItem(v.Select) {
 			if bodyUsesCurrentGroup(v.Body) {
-				return staticError(errCodeXTSE3430,
+				return staticError(lexicon.ErrXTSE3430,
 					"xsl:for-each-group body has current-group() inside focus-changing xsl:copy, which is not streamable")
 			}
 		}
@@ -872,7 +872,7 @@ func checkMapStreamable(_ *Stylesheet, inst instruction) error {
 				consumingParts++
 			}
 			if consumingParts > 1 {
-				return staticError(errCodeXTSE3430,
+				return staticError(lexicon.ErrXTSE3430,
 					"xsl:map-entry has multiple consuming expressions (key and value), which is not streamable")
 			}
 
@@ -880,7 +880,7 @@ func checkMapStreamable(_ *Stylesheet, inst instruction) error {
 			// source but does not ground or atomize the result produces
 			// streaming nodes that become invalid after the branch completes.
 			if me.Select != nil && argHasStreamingDownwardUngrounded(me.Select.AST()) {
-				return staticError(errCodeXTSE3430,
+				return staticError(lexicon.ErrXTSE3430,
 					"xsl:map-entry select returns ungrounded streaming nodes, which is not streamable")
 			}
 
@@ -893,7 +893,7 @@ func checkMapStreamable(_ *Stylesheet, inst instruction) error {
 	}
 
 	if hasNonEntryChildren && consumingEntries > 0 {
-		return staticError(errCodeXTSE3430,
+		return staticError(lexicon.ErrXTSE3430,
 			"xsl:map has non-map-entry children with consuming map entries, which is not streamable")
 	}
 
@@ -927,7 +927,7 @@ func checkIterateStreamable(_ *Stylesheet, inst instruction) error {
 	// Look for next-iteration with-param that includes "." (context item)
 	// This is the pattern where streamed nodes accumulate
 	if bodyAccumulatesStreamedNodes(iter.Body, elemParams) {
-		return staticError(errCodeXTSE3430,
+		return staticError(lexicon.ErrXTSE3430,
 			"xsl:iterate accumulates streamed nodes in element()* parameter, which is not streamable")
 	}
 

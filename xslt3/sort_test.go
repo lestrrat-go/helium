@@ -7,6 +7,7 @@ import (
 	"testing"
 
 	"github.com/lestrrat-go/helium"
+	"github.com/lestrrat-go/helium/internal/lexicon"
 	"github.com/lestrrat-go/helium/xslt3"
 	"github.com/stretchr/testify/require"
 )
@@ -32,7 +33,7 @@ func TestSortValidation(t *testing.T) {
 
 		_, err = ss.Transform(doc).Serialize(t.Context())
 		require.Error(t, err)
-		require.ErrorContains(t, err, "XTDE0030")
+		require.ErrorContains(t, err, lexicon.ErrXTDE0030)
 	})
 
 	// ENG-003: an evaluated xsl:sort case-order that is neither "upper-first"
@@ -55,7 +56,7 @@ func TestSortValidation(t *testing.T) {
 
 		_, err = ss.Transform(doc).Serialize(t.Context())
 		require.Error(t, err)
-		require.ErrorContains(t, err, "XTDE0030")
+		require.ErrorContains(t, err, lexicon.ErrXTDE0030)
 	})
 
 	// ENG-003: a stable AVT must be parsed and evaluated without error, and a
@@ -100,7 +101,7 @@ func TestSortValidation(t *testing.T) {
 
 		_, err = ss.Transform(doc).Serialize(t.Context())
 		require.Error(t, err)
-		require.ErrorContains(t, err, "XTDE0030")
+		require.ErrorContains(t, err, lexicon.ErrXTDE0030)
 	})
 
 	// XSLT3-ADV-003: a NON-EMPTY atomic xsl:for-each (atomic-sequence sort path)
@@ -124,7 +125,7 @@ func TestSortValidation(t *testing.T) {
 
 		_, err = ss.Transform(doc).Serialize(t.Context())
 		require.Error(t, err)
-		require.ErrorContains(t, err, "XTDE0030")
+		require.ErrorContains(t, err, lexicon.ErrXTDE0030)
 	})
 
 	// ENG-004: xsl:perform-sort over an EMPTY sequence must still validate its
@@ -146,7 +147,7 @@ func TestSortValidation(t *testing.T) {
 
 		_, err = ss.Transform(doc).Serialize(t.Context())
 		require.Error(t, err)
-		require.ErrorContains(t, err, "XTDE1035")
+		require.ErrorContains(t, err, lexicon.ErrXTDE1035)
 	})
 
 	// XSLT3-ADV-003: an xsl:sort data-type that is neither "text"/"number" nor a
@@ -169,7 +170,7 @@ func TestSortValidation(t *testing.T) {
 
 		_, err = ss.Transform(doc).Serialize(t.Context())
 		require.Error(t, err)
-		require.ErrorContains(t, err, "XTDE0030")
+		require.ErrorContains(t, err, lexicon.ErrXTDE0030)
 	})
 
 	// XSLT3-ADV-003: an invalid evaluated data-type with non-empty input must also
@@ -192,7 +193,7 @@ func TestSortValidation(t *testing.T) {
 
 		_, err = ss.Transform(doc).Serialize(t.Context())
 		require.Error(t, err)
-		require.ErrorContains(t, err, "XTDE0030")
+		require.ErrorContains(t, err, lexicon.ErrXTDE0030)
 	})
 }
 
@@ -223,7 +224,7 @@ func TestSortKeyTypes(t *testing.T) {
 
 		_, err = ss.Transform(doc).Serialize(t.Context())
 		require.Error(t, err)
-		require.ErrorContains(t, err, "XTDE1030")
+		require.ErrorContains(t, err, lexicon.ErrXTDE1030)
 	})
 
 	// XSLT3-102 r2: a SECONDARY sort key with explicit data-type="text" stringifies
@@ -385,7 +386,7 @@ func TestSortKeyTypes(t *testing.T) {
 
 		_, err = ss.Transform(doc).Serialize(t.Context())
 		require.Error(t, err)
-		require.ErrorContains(t, err, "XTDE1030")
+		require.ErrorContains(t, err, lexicon.ErrXTDE1030)
 	})
 
 	// XSLT3-102 r3: a default-data-type sort mixing xs:dateTimeStamp and xs:dateTime
@@ -468,7 +469,7 @@ func TestSortKeyTypes(t *testing.T) {
 
 		_, err = ss.Transform(doc).Serialize(t.Context())
 		require.Error(t, err)
-		require.ErrorContains(t, err, "XTDE1030")
+		require.ErrorContains(t, err, lexicon.ErrXTDE1030)
 	})
 
 	// XSLT3-102 r4: a default-data-type SINGLE-key sort mixing xs:yearMonthDuration
@@ -498,7 +499,7 @@ func TestSortKeyTypes(t *testing.T) {
 
 		_, err = ss.Transform(doc).Serialize(t.Context())
 		require.Error(t, err)
-		require.ErrorContains(t, err, "XTDE1030")
+		require.ErrorContains(t, err, lexicon.ErrXTDE1030)
 	})
 
 	// XSLT3-102 r4: a default-data-type MULTI-key sort whose SECONDARY key mixes
@@ -527,7 +528,7 @@ func TestSortKeyTypes(t *testing.T) {
 
 		_, err = ss.Transform(doc).Serialize(t.Context())
 		require.Error(t, err)
-		require.ErrorContains(t, err, "XTDE1030")
+		require.ErrorContains(t, err, lexicon.ErrXTDE1030)
 	})
 
 	// XSLT3-102 r4: a no-`select` BODY xsl:sort whose sequence-constructor key
@@ -561,7 +562,7 @@ func TestSortKeyTypes(t *testing.T) {
 
 		_, err = ss.Transform(doc).Serialize(t.Context())
 		require.Error(t, err)
-		require.ErrorContains(t, err, "XTDE1030")
+		require.ErrorContains(t, err, lexicon.ErrXTDE1030)
 	})
 
 	// XSLT3-102 r2: likewise, a SECONDARY sort key with explicit data-type="number"

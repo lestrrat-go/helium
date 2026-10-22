@@ -174,7 +174,7 @@ func (f *xslUserFunc) Call(ctx context.Context, args []xpath3.Sequence) (xpath3.
 	ec.depth++
 	if ec.depth > maxRecursionDepth {
 		ec.depth--
-		return nil, dynamicError(errCodeXTDE0820, "recursion depth exceeded in xsl:function %s", f.def.Name.Name)
+		return nil, dynamicError(lexicon.ErrXTDE0820, "recursion depth exceeded in xsl:function %s", f.def.Name.Name)
 	}
 	defer func() { ec.depth-- }()
 
@@ -241,7 +241,7 @@ func (f *xslUserFunc) Call(ctx context.Context, args []xpath3.Sequence) (xpath3.
 			val := args[i]
 			if param.As != "" {
 				st := f.def.paramCheckTypes[i]
-				checked, err := checkSequenceType(ctx, val, st, errCodeXTTE0790, "param $"+param.Name, ec)
+				checked, err := checkSequenceType(ctx, val, st, lexicon.ErrXTTE0790, "param $"+param.Name, ec)
 				if err != nil {
 					return nil, err
 				}
@@ -326,7 +326,7 @@ func (f *xslUserFunc) Call(ctx context.Context, args []xpath3.Sequence) (xpath3.
 
 	// Type check against the declared as type
 	if f.def.As != "" {
-		checked, err := checkSequenceType(ctx, result, f.def.returnCheckType, errCodeXTTE0780, "function "+f.def.Name.Name, ec)
+		checked, err := checkSequenceType(ctx, result, f.def.returnCheckType, lexicon.ErrXTTE0780, "function "+f.def.Name.Name, ec)
 		if err != nil {
 			return nil, err
 		}

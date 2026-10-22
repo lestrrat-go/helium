@@ -68,9 +68,9 @@ func (ec *execContext) xsltFunctionsNS() map[xpath3.QualifiedName]xpath3.Functio
 	ec.cachedFnsNS[xpath3.QualifiedName{URI: xpath3.NSFn, Name: fnNameCurrent}] =
 		&xsltFunc{min: 0, max: 0, fn: ec.fnCurrent}
 	ec.cachedFnsNS[xpath3.QualifiedName{URI: xpath3.NSFn, Name: fnNameCurrentGroup}] =
-		&xsltFunc{min: 0, max: 0, fn: ec.fnCurrentGroup, noDynRef: true, dynRefError: errCodeXTDE1061}
+		&xsltFunc{min: 0, max: 0, fn: ec.fnCurrentGroup, noDynRef: true, dynRefError: lexicon.ErrXTDE1061}
 	ec.cachedFnsNS[xpath3.QualifiedName{URI: xpath3.NSFn, Name: fnNameCurrentGroupingKey}] =
-		&xsltFunc{min: 0, max: 0, fn: ec.fnCurrentGroupingKey, noDynRef: true, dynRefError: errCodeXTDE1071}
+		&xsltFunc{min: 0, max: 0, fn: ec.fnCurrentGroupingKey, noDynRef: true, dynRefError: lexicon.ErrXTDE1071}
 	ec.cachedFnsNS[xpath3.QualifiedName{URI: xpath3.NSFn, Name: "current-merge-group"}] =
 		&xsltFunc{min: 0, max: 1, fn: ec.fnCurrentMergeGroup}
 	ec.cachedFnsNS[xpath3.QualifiedName{URI: xpath3.NSFn, Name: "current-merge-key"}] =
@@ -567,15 +567,15 @@ func (cfg *transformFnConfig) run(ctx context.Context, args []xpath3.Sequence) (
 		depth = d
 	}
 	if depth >= maxTransformDepth {
-		return nil, dynamicError(errCodeFOXT0004, "fn:transform: maximum recursion depth (%d) exceeded", maxTransformDepth)
+		return nil, dynamicError(lexicon.ErrFOXT0004, "fn:transform: maximum recursion depth (%d) exceeded", maxTransformDepth)
 	}
 	ctx = context.WithValue(ctx, transformDepthKey{}, depth+1)
 	if len(args) != 1 || (args[0] == nil || sequence.Len(args[0]) != 1) {
-		return nil, dynamicError(errCodeFOXT0001, "fn:transform requires a single map argument")
+		return nil, dynamicError(lexicon.ErrFOXT0001, "fn:transform requires a single map argument")
 	}
 	m, ok := args[0].Get(0).(xpath3.MapItem)
 	if !ok {
-		return nil, dynamicError(errCodeFOXT0001, "fn:transform argument must be a map")
+		return nil, dynamicError(lexicon.ErrFOXT0001, "fn:transform argument must be a map")
 	}
 
 	// Extract option values from the map
@@ -713,11 +713,11 @@ func (cfg *transformFnConfig) run(ctx context.Context, args []xpath3.Sequence) (
 		var data []byte
 		baseURI := loc
 		if cfg.stylesheetResolver == nil {
-			return nil, dynamicError(errCodeFOXT0003, "fn:transform: cannot read stylesheet %q: no URIResolver configured (filesystem access is opt-in)", stylesheetLoc)
+			return nil, dynamicError(lexicon.ErrFOXT0003, "fn:transform: cannot read stylesheet %q: no URIResolver configured (filesystem access is opt-in)", stylesheetLoc)
 		}
 		rc, resolveErr := cfg.stylesheetResolver.Resolve(loc)
 		if resolveErr != nil {
-			return nil, dynamicError(errCodeFOXT0003, "fn:transform: cannot resolve stylesheet %q: %v", stylesheetLoc, resolveErr)
+			return nil, dynamicError(lexicon.ErrFOXT0003, "fn:transform: cannot resolve stylesheet %q: %v", stylesheetLoc, resolveErr)
 		}
 		var readErr error
 		data, readErr = readResourceBounded(rc, cfg.maxResourceBytes)
@@ -726,36 +726,36 @@ func (cfg *transformFnConfig) run(ctx context.Context, args []xpath3.Sequence) (
 		// hold the source handle open across that work.
 		_ = rc.Close()
 		if readErr != nil {
-			return nil, dynamicErrorCause(errCodeFOXT0003, readErr, "fn:transform: cannot read stylesheet %q: %v", stylesheetLoc, readErr)
+			return nil, dynamicErrorCause(lexicon.ErrFOXT0003, readErr, "fn:transform: cannot read stylesheet %q: %v", stylesheetLoc, readErr)
 		}
 		doc, parseErr := parseStylesheetDocument(ctx, cfg.parseParser, data, baseURI, cfg.allowExternalEntities, cfg.entityLoader, cfg.maxResourceBytes)
 		if parseErr != nil {
-			return nil, dynamicError(errCodeFOXT0003, "fn:transform: cannot parse stylesheet %q: %v", stylesheetLoc, parseErr)
+			return nil, dynamicError(lexicon.ErrFOXT0003, "fn:transform: cannot parse stylesheet %q: %v", stylesheetLoc, parseErr)
 		}
 		var compileErr error
 		ss, compileErr = nestedCompiler.BaseURI(baseURI).Compile(ctx, doc)
 		if compileErr != nil {
-			return nil, dynamicErrorCause(errCodeFOXT0003, compileErr, "fn:transform: cannot compile stylesheet %q: %v", stylesheetLoc, compileErr)
+			return nil, dynamicErrorCause(lexicon.ErrFOXT0003, compileErr, "fn:transform: cannot compile stylesheet %q: %v", stylesheetLoc, compileErr)
 		}
 	} else if packageName != "" {
 		// Resolve via package-name / package-version using the PackageResolver
 		// stored on the compiled stylesheet (set at compile time).
 		resolver := cfg.packageResolver
 		if resolver == nil {
-			return nil, dynamicError(errCodeFOXT0002, "fn:transform: package-name specified but no PackageResolver available")
+			return nil, dynamicError(lexicon.ErrFOXT0002, "fn:transform: package-name specified but no PackageResolver available")
 		}
 		rc, location, resolveErr := resolver.ResolvePackage(packageName, packageVersion)
 		if resolveErr != nil {
-			return nil, dynamicError(errCodeFOXT0003, "fn:transform: cannot resolve package %q (version %q): %v", packageName, packageVersion, resolveErr)
+			return nil, dynamicError(lexicon.ErrFOXT0003, "fn:transform: cannot resolve package %q (version %q): %v", packageName, packageVersion, resolveErr)
 		}
 		data, readErr := readResourceBounded(rc, cfg.maxResourceBytes)
 		_ = rc.Close()
 		if readErr != nil {
-			return nil, dynamicErrorCause(errCodeFOXT0003, readErr, "fn:transform: cannot read package %q: %v", packageName, readErr)
+			return nil, dynamicErrorCause(lexicon.ErrFOXT0003, readErr, "fn:transform: cannot read package %q: %v", packageName, readErr)
 		}
 		doc, parseErr := parseStylesheetDocument(ctx, cfg.parseParser, data, location, cfg.allowExternalEntities, cfg.entityLoader, cfg.maxResourceBytes)
 		if parseErr != nil {
-			return nil, dynamicError(errCodeFOXT0003, "fn:transform: cannot parse package %q: %v", packageName, parseErr)
+			return nil, dynamicError(lexicon.ErrFOXT0003, "fn:transform: cannot parse package %q: %v", packageName, parseErr)
 		}
 		compiler := nestedCompiler
 		if location != "" {
@@ -764,7 +764,7 @@ func (cfg *transformFnConfig) run(ctx context.Context, args []xpath3.Sequence) (
 		var compileErr error
 		ss, compileErr = compiler.Compile(ctx, doc)
 		if compileErr != nil {
-			return nil, dynamicErrorCause(errCodeFOXT0003, compileErr, "fn:transform: cannot compile package %q: %v", packageName, compileErr)
+			return nil, dynamicErrorCause(lexicon.ErrFOXT0003, compileErr, "fn:transform: cannot compile package %q: %v", packageName, compileErr)
 		}
 	} else if stylesheetText := getStr("stylesheet-text"); stylesheetText != "" {
 		// stylesheet-text: the stylesheet source is supplied inline as a string.
@@ -777,7 +777,7 @@ func (cfg *transformFnConfig) run(ctx context.Context, args []xpath3.Sequence) (
 		}
 		doc, parseErr := parseStylesheetDocument(ctx, cfg.parseParser, []byte(stylesheetText), baseURI, cfg.allowExternalEntities, cfg.entityLoader, cfg.maxResourceBytes)
 		if parseErr != nil {
-			return nil, dynamicError(errCodeFOXT0003, "fn:transform: cannot parse stylesheet-text: %v", parseErr)
+			return nil, dynamicError(lexicon.ErrFOXT0003, "fn:transform: cannot parse stylesheet-text: %v", parseErr)
 		}
 		compiler := nestedCompiler
 		if baseURI != "" {
@@ -786,7 +786,7 @@ func (cfg *transformFnConfig) run(ctx context.Context, args []xpath3.Sequence) (
 		var compileErr error
 		ss, compileErr = compiler.Compile(ctx, doc)
 		if compileErr != nil {
-			return nil, dynamicErrorCause(errCodeFOXT0003, compileErr, "fn:transform: cannot compile stylesheet-text: %v", compileErr)
+			return nil, dynamicErrorCause(lexicon.ErrFOXT0003, compileErr, "fn:transform: cannot compile stylesheet-text: %v", compileErr)
 		}
 	} else {
 		// Check for stylesheet-node
@@ -795,7 +795,7 @@ func (cfg *transformFnConfig) run(ctx context.Context, args []xpath3.Sequence) (
 			if ni, ok := ssNodeSeq.Get(0).(xpath3.NodeItem); ok {
 				owner := owningDocument(ni.Node)
 				if owner == nil {
-					return nil, dynamicError(errCodeFOXT0003, "fn:transform: stylesheet-node is not part of a document")
+					return nil, dynamicError(lexicon.ErrFOXT0003, "fn:transform: stylesheet-node is not part of a document")
 				}
 				// Base URI for resolving relative xsl:include/xsl:import inside the
 				// stylesheet node, taken from the original node. Default to the node's
@@ -812,7 +812,7 @@ func (cfg *transformFnConfig) run(ctx context.Context, args []xpath3.Sequence) (
 				// than the owning document (whose document element is a different node).
 				compileDoc, prepErr := stylesheetNodeCompileDocument(ni.Node, owner)
 				if prepErr != nil {
-					return nil, dynamicErrorCause(errCodeFOXT0003, prepErr, "fn:transform: cannot prepare stylesheet node: %v", prepErr)
+					return nil, dynamicErrorCause(lexicon.ErrFOXT0003, prepErr, "fn:transform: cannot prepare stylesheet node: %v", prepErr)
 				}
 				compiler := nestedCompiler
 				if baseURI != "" {
@@ -821,14 +821,14 @@ func (cfg *transformFnConfig) run(ctx context.Context, args []xpath3.Sequence) (
 				var compileErr error
 				ss, compileErr = compiler.Compile(ctx, compileDoc)
 				if compileErr != nil {
-					return nil, dynamicErrorCause(errCodeFOXT0003, compileErr, "fn:transform: cannot compile stylesheet: %v", compileErr)
+					return nil, dynamicErrorCause(lexicon.ErrFOXT0003, compileErr, "fn:transform: cannot compile stylesheet: %v", compileErr)
 				}
 			}
 		}
 	}
 
 	if ss == nil {
-		return nil, dynamicError(errCodeFOXT0002, "fn:transform: no stylesheet specified (stylesheet-location, stylesheet-node, stylesheet-text, or package-name required)")
+		return nil, dynamicError(lexicon.ErrFOXT0002, "fn:transform: no stylesheet specified (stylesheet-location, stylesheet-node, stylesheet-text, or package-name required)")
 	}
 
 	// Determine the source document and the source node. The source tree that
@@ -1049,7 +1049,7 @@ func (cfg *transformFnConfig) run(ctx context.Context, args []xpath3.Sequence) (
 			outDef := applySerializationParams(fnTransformCfg.resolvedOutputDef, serializationParamsSeq)
 			s, serErr := serializeDeliveredResult(resultDoc, outDef)
 			if serErr != nil {
-				return nil, dynamicError(errCodeFOXT0003, "fn:transform: serialization error: %v", serErr)
+				return nil, dynamicError(lexicon.ErrFOXT0003, "fn:transform: serialization error: %v", serErr)
 			}
 			result = result.Put(principalKey, xpath3.SingleString(s))
 		}
@@ -1061,7 +1061,7 @@ func (cfg *transformFnConfig) run(ctx context.Context, args []xpath3.Sequence) (
 			}
 			s, serErr := serializeDeliveredResult(doc, outDef)
 			if serErr != nil {
-				return nil, dynamicError(errCodeFOXT0003, "fn:transform: serialization error: %v", serErr)
+				return nil, dynamicError(lexicon.ErrFOXT0003, "fn:transform: serialization error: %v", serErr)
 			}
 			result = result.Put(xpath3.AtomicValue{TypeName: xpath3.TypeString, Value: uri}, xpath3.SingleString(s))
 		}
@@ -1233,7 +1233,7 @@ func validateTransformOptions(m xpath3.MapItem, deliveryFormat string) error {
 		}
 	}
 	if sources != 1 {
-		return dynamicError(errCodeFOXT0002, "fn:transform: exactly one of stylesheet-location, stylesheet-node, stylesheet-text, package-name must be supplied (got %d)", sources)
+		return dynamicError(lexicon.ErrFOXT0002, "fn:transform: exactly one of stylesheet-location, stylesheet-node, stylesheet-text, package-name must be supplied (got %d)", sources)
 	}
 
 	entryPoints := 0
@@ -1243,17 +1243,17 @@ func validateTransformOptions(m xpath3.MapItem, deliveryFormat string) error {
 		}
 	}
 	if entryPoints > 1 {
-		return dynamicError(errCodeFOXT0002, "fn:transform: at most one of initial-template, initial-mode, initial-function may be supplied")
+		return dynamicError(lexicon.ErrFOXT0002, "fn:transform: at most one of initial-template, initial-mode, initial-function may be supplied")
 	}
 
 	if transformOptionPresent(transformMapSeq(m, "source-node")) && transformOptionPresent(transformMapSeq(m, "initial-match-selection")) {
-		return dynamicError(errCodeFOXT0002, "fn:transform: source-node and initial-match-selection are mutually exclusive")
+		return dynamicError(lexicon.ErrFOXT0002, "fn:transform: source-node and initial-match-selection are mutually exclusive")
 	}
 
 	switch deliveryFormat {
 	case "", "document", "serialized", lexicon.OutputRaw:
 	default:
-		return dynamicError(errCodeFOXT0002, "fn:transform: delivery-format %q is not one of document, serialized, raw", deliveryFormat)
+		return dynamicError(lexicon.ErrFOXT0002, "fn:transform: delivery-format %q is not one of document, serialized, raw", deliveryFormat)
 	}
 
 	if err := validateTransformXSLTVersion(m); err != nil {
@@ -1285,7 +1285,7 @@ func validateTransformGlobalContextItem(m xpath3.MapItem) error {
 		return nil
 	}
 	if seq == nil || sequence.Len(seq) != 1 {
-		return dynamicError(errCodeXPTY0004, "fn:transform: global-context-item must be exactly one item")
+		return dynamicError(lexicon.ErrXPTY0004, "fn:transform: global-context-item must be exactly one item")
 	}
 	return nil
 }
@@ -1299,10 +1299,10 @@ func validateTransformXSLTVersion(m xpath3.MapItem) error {
 	}
 	av, err := xpath3.AtomizeItem(seq.Get(0))
 	if err != nil {
-		return dynamicError(errCodeXPTY0004, "fn:transform: xslt-version: %v", err)
+		return dynamicError(lexicon.ErrXPTY0004, "fn:transform: xslt-version: %v", err)
 	}
 	if !av.IsNumeric() {
-		return dynamicError(errCodeXPTY0004, "fn:transform: xslt-version must be a numeric value")
+		return dynamicError(lexicon.ErrXPTY0004, "fn:transform: xslt-version must be a numeric value")
 	}
 	return nil
 }
@@ -1317,11 +1317,11 @@ func validateTransformParamMap(name string, seq xpath3.Sequence) error {
 	}
 	sm, ok := seq.Get(0).(xpath3.MapItem)
 	if !ok {
-		return dynamicError(errCodeXPTY0004, "fn:transform: %s must be a map", name)
+		return dynamicError(lexicon.ErrXPTY0004, "fn:transform: %s must be a map", name)
 	}
 	for _, key := range sm.Keys() {
 		if key.TypeName != xpath3.TypeQName {
-			return dynamicError(errCodeFOXT0002, "fn:transform: %s keys must be supplied as QNames", name)
+			return dynamicError(lexicon.ErrFOXT0002, "fn:transform: %s keys must be supplied as QNames", name)
 		}
 	}
 	return nil
@@ -1337,7 +1337,7 @@ func checkTransformCapabilities(seq xpath3.Sequence) error {
 	}
 	sm, ok := seq.Get(0).(xpath3.MapItem)
 	if !ok {
-		return dynamicError(errCodeXPTY0004, "fn:transform: requested-properties must be a map")
+		return dynamicError(lexicon.ErrXPTY0004, "fn:transform: requested-properties must be a map")
 	}
 	for _, key := range sm.Keys() {
 		qv, ok := key.Value.(xpath3.QNameValue)
@@ -1357,7 +1357,7 @@ func checkTransformCapabilities(seq xpath3.Sequence) error {
 			continue
 		}
 		if got != want {
-			return dynamicError(errCodeFOXT0006, "fn:transform: requested property %q cannot be satisfied", qv.Local)
+			return dynamicError(lexicon.ErrFOXT0006, "fn:transform: requested property %q cannot be satisfied", qv.Local)
 		}
 	}
 	return nil

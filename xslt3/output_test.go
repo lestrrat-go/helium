@@ -8,6 +8,7 @@ import (
 	"testing"
 
 	"github.com/lestrrat-go/helium"
+	"github.com/lestrrat-go/helium/internal/lexicon"
 	"github.com/lestrrat-go/helium/xpath3"
 	"github.com/lestrrat-go/helium/xslt3"
 	"github.com/stretchr/testify/require"
@@ -1322,7 +1323,7 @@ func requireSERE0006(t *testing.T, err error) {
 	require.Error(t, err)
 	var xe *xslt3.XSLTError
 	require.ErrorAs(t, err, &xe)
-	require.Equal(t, "SERE0006", xe.Code)
+	require.Equal(t, lexicon.ErrSERE0006, xe.Code)
 }
 
 // requireControlCharRef asserts the serialized output carries a character

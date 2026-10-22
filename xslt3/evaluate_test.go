@@ -6,6 +6,7 @@ import (
 	"testing"
 
 	"github.com/lestrrat-go/helium"
+	"github.com/lestrrat-go/helium/internal/lexicon"
 	"github.com/lestrrat-go/helium/xslt3"
 	"github.com/stretchr/testify/require"
 )
@@ -272,7 +273,7 @@ func TestEvaluate(t *testing.T) {
 
 				_, err := ss.Transform(doc).Serialize(t.Context())
 				require.Error(t, err)
-				require.ErrorContains(t, err, "XTTE3170")
+				require.ErrorContains(t, err, lexicon.ErrXTTE3170)
 			})
 		}
 	})

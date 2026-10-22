@@ -7,6 +7,7 @@ import (
 	"strings"
 
 	"github.com/lestrrat-go/helium"
+	"github.com/lestrrat-go/helium/internal/lexicon"
 	"github.com/lestrrat-go/helium/internal/uripath"
 	ixpath "github.com/lestrrat-go/helium/internal/xpath"
 	"github.com/lestrrat-go/helium/internal/xpathstream"
@@ -23,7 +24,7 @@ func checkGlobalVarsStreamingContext(ss *Stylesheet) error {
 			continue
 		}
 		if xpathstream.ExprHasDownwardStep(v.Select) || xpathstream.ExprUsesContextItem(v.Select) || xpathstream.ExprUsesDescendantOrSelf(v.Select) {
-			return dynamicError(errCodeXPDY0002,
+			return dynamicError(lexicon.ErrXPDY0002,
 				"global variable $%s references the document context, which is absent when the initial mode is streamable",
 				v.Name)
 		}
@@ -46,7 +47,7 @@ func (ec *execContext) initGlobalVars(ctx context.Context, cfg *transformConfig)
 				if seq, ok := cfg.sequenceParams[p.Name]; ok {
 					if p.As != "" {
 						st := parseSequenceType(p.As)
-						checked, err := checkSequenceType(ctx, seq, st, errCodeXTTE0590, "param $"+p.Name, ec)
+						checked, err := checkSequenceType(ctx, seq, st, lexicon.ErrXTTE0590, "param $"+p.Name, ec)
 						if err != nil {
 							return err
 						}
@@ -64,7 +65,7 @@ func (ec *execContext) initGlobalVars(ctx context.Context, cfg *transformConfig)
 	// the caller must raise an error immediately, even if never referenced.
 	for _, p := range ec.globalParamDefs {
 		if p.Required {
-			return dynamicError(errCodeXTDE0050, "required stylesheet parameter $%s was not supplied", p.Name)
+			return dynamicError(lexicon.ErrXTDE0050, "required stylesheet parameter $%s was not supplied", p.Name)
 		}
 	}
 
@@ -105,7 +106,7 @@ func (ec *execContext) validateGlobalContextItem(ctx context.Context, source *he
 	}
 	if ctxItem == nil {
 		if gci.Use == ctxItemRequired {
-			return dynamicError(errCodeXTDE3086, "global-context-item use=\"required\" but no global context item was supplied")
+			return dynamicError(lexicon.ErrXTDE3086, "global-context-item use=\"required\" but no global context item was supplied")
 		}
 		return nil
 	}
@@ -135,7 +136,7 @@ func (ec *execContext) validateGlobalContextItem(ctx context.Context, source *he
 
 	st := parseSequenceType(gci.As)
 	seq := xpath3.ItemSlice{ctxItem}
-	if _, err := checkSequenceType(ctx, seq, st, errCodeXTTE0590, "global-context-item", ec); err != nil {
+	if _, err := checkSequenceType(ctx, seq, st, lexicon.ErrXTTE0590, "global-context-item", ec); err != nil {
 		return err
 	}
 	return nil
@@ -154,7 +155,7 @@ func validateUsedPackageGlobalContextItem(ss *Stylesheet, seen map[*Stylesheet]s
 		}
 		seen[pkg] = struct{}{}
 		if pkg.globalContextItem != nil && pkg.globalContextItem.Use == ctxItemRequired {
-			return dynamicError(errCodeXTTE0590, "library package declares xsl:global-context-item use=\"required\"")
+			return dynamicError(lexicon.ErrXTTE0590, "library package declares xsl:global-context-item use=\"required\"")
 		}
 		if err := validateUsedPackageGlobalContextItem(pkg, seen); err != nil {
 			return err
@@ -234,13 +235,13 @@ func (ec *execContext) invokeInitialFunction(ctx context.Context, cfg *transform
 
 	fn := ec.findXSLFunctionByArity(qn, len(cfg.initialFunctionParams))
 	if fn == nil {
-		return nil, dynamicError(errCodeXTDE0041, "initial function %q not found", cfg.initialFunction)
+		return nil, dynamicError(lexicon.ErrXTDE0041, "initial function %q not found", cfg.initialFunction)
 	}
 	if fn.Visibility != visPublic && fn.Visibility != visFinal {
-		return nil, dynamicError(errCodeXTDE0041, "initial function %q is not public", cfg.initialFunction)
+		return nil, dynamicError(lexicon.ErrXTDE0041, "initial function %q is not public", cfg.initialFunction)
 	}
 	if len(cfg.initialFunctionParams) != len(fn.Params) {
-		return nil, dynamicError(errCodeXTDE0041, "initial function %q expects %d parameters but %d were supplied", cfg.initialFunction, len(fn.Params), len(cfg.initialFunctionParams))
+		return nil, dynamicError(lexicon.ErrXTDE0041, "initial function %q expects %d parameters but %d were supplied", cfg.initialFunction, len(fn.Params), len(cfg.initialFunctionParams))
 	}
 
 	// Call the function
@@ -357,7 +358,7 @@ func (ec *execContext) evaluateGlobalVar(ctx context.Context, v *variable) (xpat
 
 	// Abstract variables have no implementation — raise XTDE3052.
 	if v.Visibility == visAbstract {
-		return nil, dynamicError(errCodeXTDE3052,
+		return nil, dynamicError(lexicon.ErrXTDE3052,
 			"abstract variable $%s was invoked without being overridden", v.Name)
 	}
 
@@ -432,7 +433,7 @@ func (ec *execContext) evaluateGlobalVar(ctx context.Context, v *variable) (xpat
 	// Type check against the declared as type
 	if v.As != "" {
 		st := parseSequenceType(v.As)
-		checked, err := checkSequenceType(ctx, val, st, errCodeXTTE0570, "variable $"+v.Name, ec)
+		checked, err := checkSequenceType(ctx, val, st, lexicon.ErrXTTE0570, "variable $"+v.Name, ec)
 		if err != nil {
 			return nil, err
 		}
@@ -481,7 +482,7 @@ func (ec *execContext) evaluateGlobalParam(ctx context.Context, p *param) (xpath
 	// XTDE0050: required stylesheet parameter not supplied by the caller.
 	// If we reach here (not set in initGlobalVars), no external value was given.
 	if p.Required {
-		return nil, dynamicError(errCodeXTDE0050, "required stylesheet parameter $%s was not supplied", p.Name)
+		return nil, dynamicError(lexicon.ErrXTDE0050, "required stylesheet parameter $%s was not supplied", p.Name)
 	}
 
 	if p.Select != nil {
@@ -522,7 +523,7 @@ func (ec *execContext) evaluateGlobalParam(ctx context.Context, p *param) (xpath
 	// Type check against the declared as type
 	if p.As != "" {
 		st := parseSequenceType(p.As)
-		checked, err := checkSequenceType(ctx, val, st, errCodeXTTE0570, "param $"+p.Name, ec)
+		checked, err := checkSequenceType(ctx, val, st, lexicon.ErrXTTE0570, "param $"+p.Name, ec)
 		if err != nil {
 			return nil, err
 		}

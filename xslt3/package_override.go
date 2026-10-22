@@ -105,7 +105,7 @@ func (c *compiler) pushStandardAttrs(ctx context.Context, elem *helium.Element) 
 		v, valid := parseXSDBool(et)
 		if !valid {
 			c.restoreStandardAttrs(saved)
-			return saved, staticError(errCodeXTSE0020, "%q is not a valid value for xsl:%s/@expand-text", et, elem.LocalName())
+			return saved, staticError(lexicon.ErrXTSE0020, "%q is not a valid value for xsl:%s/@expand-text", et, elem.LocalName())
 		}
 		c.expandText = v
 	}
@@ -162,13 +162,13 @@ func (c *compiler) compileOverrideChildren(ctx context.Context, overrideElem *he
 			// Check for non-whitespace text nodes
 			if child.Type() == helium.TextNode || child.Type() == helium.CDATASectionNode {
 				if strings.TrimSpace(string(child.Content())) != "" {
-					return staticError(errCodeXTSE0010, "text is not allowed as a child of xsl:override")
+					return staticError(lexicon.ErrXTSE0010, "text is not allowed as a child of xsl:override")
 				}
 			}
 			continue
 		}
 		if elem.URI() != lexicon.NamespaceXSLT {
-			return staticError(errCodeXTSE0010,
+			return staticError(lexicon.ErrXTSE0010,
 				"non-XSLT element %q is not allowed inside xsl:override", elem.Name())
 		}
 
@@ -198,7 +198,7 @@ func (c *compiler) compileOverrideChildren(ctx context.Context, overrideElem *he
 			}
 			fk := funcKey{Name: qn, Arity: len(fn.Params)}
 			if _, dup := oset.functions[fk]; dup {
-				return staticError(errCodeXTSE0770,
+				return staticError(lexicon.ErrXTSE0770,
 					"duplicate override of function %s#%d in xsl:override",
 					fmt.Sprintf("{%s}%s", qn.URI, qn.Name), len(fn.Params))
 			}
@@ -251,7 +251,7 @@ func (c *compiler) compileOverrideChildren(ctx context.Context, overrideElem *he
 			oset.attributeSets[as.Name] = as
 
 		default:
-			return staticError(errCodeXTSE0010,
+			return staticError(lexicon.ErrXTSE0010,
 				"xsl:override may only contain template, function, variable, param, or attribute-set; got xsl:%s",
 				elem.LocalName())
 		}
@@ -281,7 +281,7 @@ func (c *compiler) excludedByUseWhen(ctx context.Context, elem *helium.Element) 
 func (c *compiler) claimOverrideDecl(kind, name string) error {
 	key := kind + ":" + name
 	if _, dup := c.overrideDecls[key]; dup {
-		return staticError(errCodeXTSE3055,
+		return staticError(lexicon.ErrXTSE3055,
 			"xsl:override declares %s %q more than once in the using package", kind, name)
 	}
 	if c.overrideDecls == nil {
@@ -296,7 +296,7 @@ func (c *compiler) compileOverrideFunction(ctx context.Context, elem *helium.Ele
 	defer c.pushElementVersion(elem)()
 	name := getAttr(elem, "name")
 	if name == "" {
-		return nil, xpath3.QualifiedName{}, staticError(errCodeXTSE0110, "xsl:function in xsl:override requires name attribute")
+		return nil, xpath3.QualifiedName{}, staticError(lexicon.ErrXTSE0110, "xsl:function in xsl:override requires name attribute")
 	}
 
 	c.collectNamespaces(ctx, elem)
@@ -305,7 +305,7 @@ func (c *compiler) compileOverrideFunction(ctx context.Context, elem *helium.Ele
 	if strings.HasPrefix(name, "Q{") {
 		closeBrace := strings.IndexByte(name, '}')
 		if closeBrace < 0 {
-			return nil, xpath3.QualifiedName{}, staticError(errCodeXTSE0010, "malformed EQName in xsl:function name %q", name)
+			return nil, xpath3.QualifiedName{}, staticError(lexicon.ErrXTSE0010, "malformed EQName in xsl:function name %q", name)
 		}
 		uri := name[2:closeBrace]
 		local := name[closeBrace+1:]
@@ -316,11 +316,11 @@ func (c *compiler) compileOverrideFunction(ctx context.Context, elem *helium.Ele
 			uri = c.stylesheet.namespaces[prefix]
 		}
 		if uri == "" {
-			return nil, xpath3.QualifiedName{}, staticError(errCodeXTSE0010, "unresolved namespace prefix %q in xsl:function name %q", prefix, name)
+			return nil, xpath3.QualifiedName{}, staticError(lexicon.ErrXTSE0010, "unresolved namespace prefix %q in xsl:function name %q", prefix, name)
 		}
 		qn = xpath3.QualifiedName{URI: uri, Name: local}
 	} else {
-		return nil, xpath3.QualifiedName{}, staticError(errCodeXTSE0010, "xsl:function name %q must have a namespace prefix", name)
+		return nil, xpath3.QualifiedName{}, staticError(lexicon.ErrXTSE0010, "xsl:function name %q must have a namespace prefix", name)
 	}
 
 	// Check that the function exists in the package (check by name, any arity)
@@ -332,13 +332,13 @@ func (c *compiler) compileOverrideFunction(ctx context.Context, elem *helium.Ele
 		}
 	}
 	if pkgFn == nil {
-		return nil, xpath3.QualifiedName{}, staticError(errCodeXTSE3058,
+		return nil, xpath3.QualifiedName{}, staticError(lexicon.ErrXTSE3058,
 			"xsl:override function %q not found in used package", name)
 	}
 
 	// Check visibility: cannot override final
 	if pkgFn.Visibility == visFinal {
-		return nil, xpath3.QualifiedName{}, staticError(errCodeXTSE3070,
+		return nil, xpath3.QualifiedName{}, staticError(lexicon.ErrXTSE3070,
 			"cannot override final function %q", name)
 	}
 
@@ -351,7 +351,7 @@ func (c *compiler) compileOverrideFunction(ctx context.Context, elem *helium.Ele
 			baseNET = "maybe" // default per spec
 		}
 		if overrideNET != baseNET {
-			return nil, xpath3.QualifiedName{}, staticError(errCodeXTSE3070,
+			return nil, xpath3.QualifiedName{}, staticError(lexicon.ErrXTSE3070,
 				"override function %q: new-each-time=%q does not match base component value %q",
 				name, overrideNET, baseNET)
 		}
@@ -486,18 +486,18 @@ func (c *compiler) compileOverrideTemplate(ctx context.Context, elem *helium.Ele
 	if tmpl.Name != "" {
 		existing, exists := pkg.namedTemplates[tmpl.Name]
 		if !exists {
-			return nil, staticError(errCodeXTSE3058,
+			return nil, staticError(lexicon.ErrXTSE3058,
 				"xsl:override template %q not found in used package", tmpl.Name)
 		}
 		// Check visibility: cannot override final template
 		if existing.Visibility == visFinal {
-			return nil, staticError(errCodeXTSE3070,
+			return nil, staticError(lexicon.ErrXTSE3070,
 				"cannot override final template %q", tmpl.Name)
 		}
 		// Check visibility: cannot override private/hidden template
 		pkgVis := getComponentVisibility(pkg, xslElemTemplate, tmpl.Name)
 		if pkgVis == visPrivate || pkgVis == visHidden {
-			return nil, staticError(errCodeXTSE3050,
+			return nil, staticError(lexicon.ErrXTSE3050,
 				"cannot override %s template %q", pkgVis, tmpl.Name)
 		}
 	}
@@ -552,7 +552,7 @@ func (c *compiler) compileOverrideVariable(ctx context.Context, elem *helium.Ele
 	}
 	name := getAttr(elem, "name")
 	if name == "" {
-		return nil, staticError(errCodeXTSE0110, "xsl:variable in xsl:override requires name attribute")
+		return nil, staticError(lexicon.ErrXTSE0110, "xsl:variable in xsl:override requires name attribute")
 	}
 	resolvedName := resolveQName(name, c.nsBindings)
 
@@ -576,7 +576,7 @@ func (c *compiler) compileOverrideVariable(ctx context.Context, elem *helium.Ele
 			}
 		}
 		if !found {
-			return nil, staticError(errCodeXTSE3058,
+			return nil, staticError(lexicon.ErrXTSE3058,
 				"xsl:override variable %q not found in used package", name)
 		}
 	}
@@ -598,10 +598,10 @@ func (c *compiler) compileOverrideVariable(ctx context.Context, elem *helium.Ele
 	}
 	switch effectiveVis {
 	case visFinal:
-		return nil, staticError(errCodeXTSE3060,
+		return nil, staticError(lexicon.ErrXTSE3060,
 			"cannot override final variable %q", name)
 	case visPrivate, visHidden:
-		return nil, staticError(errCodeXTSE3060,
+		return nil, staticError(lexicon.ErrXTSE3060,
 			"cannot override %s variable %q", effectiveVis, name)
 	}
 
@@ -622,7 +622,7 @@ func (c *compiler) compileOverrideVariable(ctx context.Context, elem *helium.Ele
 	// XTSE3070.
 	if pkgVar != nil && v.As != "" && pkgVar.As != "" && v.As != pkgVar.As {
 		if isStandardType(v.As) && isStandardType(pkgVar.As) {
-			return nil, staticError(errCodeXTSE3070,
+			return nil, staticError(lexicon.ErrXTSE3070,
 				"override variable %q type %q does not match base type %q",
 				name, v.As, pkgVar.As)
 		}
@@ -709,7 +709,7 @@ func (c *compiler) compileOverrideParam(ctx context.Context, elem *helium.Elemen
 		}
 	}
 	if !found {
-		return nil, staticError(errCodeXTSE3058,
+		return nil, staticError(lexicon.ErrXTSE3058,
 			"xsl:override param %q not found in used package", p.Name)
 	}
 
@@ -721,18 +721,18 @@ func (c *compiler) compileOverrideAttributeSet(ctx context.Context, elem *helium
 	defer c.pushElementVersion(elem)()
 	name := getAttr(elem, "name")
 	if name == "" {
-		return nil, staticError(errCodeXTSE0110, "xsl:attribute-set in xsl:override requires name attribute")
+		return nil, staticError(lexicon.ErrXTSE0110, "xsl:attribute-set in xsl:override requires name attribute")
 	}
 	resolvedName := resolveQName(name, c.nsBindings)
 
 	// Check that the attribute-set exists in the package
 	if pkg.attributeSets == nil {
-		return nil, staticError(errCodeXTSE3058,
+		return nil, staticError(lexicon.ErrXTSE3058,
 			"xsl:override attribute-set %q not found in used package", name)
 	}
 	pkgAS, exists := pkg.attributeSets[resolvedName]
 	if !exists {
-		return nil, staticError(errCodeXTSE3058,
+		return nil, staticError(lexicon.ErrXTSE3058,
 			"xsl:override attribute-set %q not found in used package", name)
 	}
 
@@ -748,10 +748,10 @@ func (c *compiler) compileOverrideAttributeSet(ctx context.Context, elem *helium
 	}
 	switch effectiveVis {
 	case visFinal:
-		return nil, staticError(errCodeXTSE3060,
+		return nil, staticError(lexicon.ErrXTSE3060,
 			"cannot override final attribute-set %q", name)
 	case visPrivate, visHidden:
-		return nil, staticError(errCodeXTSE3060,
+		return nil, staticError(lexicon.ErrXTSE3060,
 			"cannot override %s attribute-set %q", effectiveVis, name)
 	}
 
@@ -794,7 +794,7 @@ func checkOverrideTemplateCompat(override, base *template) error {
 	// If both templates have 'as' attributes, they must be compatible
 	// (the override's return type must be a subtype of the base's).
 	if base.As != "" && override.As != "" && base.As != override.As {
-		return staticError(errCodeXTSE3070,
+		return staticError(lexicon.ErrXTSE3070,
 			"override template %q return type %q does not match base type %q",
 			override.Name, override.As, base.As)
 	}
@@ -802,12 +802,12 @@ func checkOverrideTemplateCompat(override, base *template) error {
 	// XTSE3070: check context-item compatibility.
 	// The override must have the same context-item type and use as the base.
 	if override.ContextItemAs != "" && override.ContextItemAs != base.ContextItemAs {
-		return staticError(errCodeXTSE3070,
+		return staticError(lexicon.ErrXTSE3070,
 			"override template %q context-item type %q does not match base type %q",
 			override.Name, override.ContextItemAs, base.ContextItemAs)
 	}
 	if override.ContextItemUse != "" && override.ContextItemUse != base.ContextItemUse {
-		return staticError(errCodeXTSE3070,
+		return staticError(lexicon.ErrXTSE3070,
 			"override template %q context-item use %q does not match base use %q",
 			override.Name, override.ContextItemUse, base.ContextItemUse)
 	}
@@ -823,14 +823,14 @@ func checkOverrideTemplateCompat(override, base *template) error {
 		if !exists {
 			// New parameter in override that doesn't exist in base
 			if op.Required {
-				return staticError(errCodeXTSE3070,
+				return staticError(lexicon.ErrXTSE3070,
 					"override template %q adds required parameter $%s not in base", override.Name, op.Name)
 			}
 			continue
 		}
 		// Check type compatibility: if both have 'as', they must match
 		if bp.As != "" && op.As != "" && bp.As != op.As {
-			return staticError(errCodeXTSE3070,
+			return staticError(lexicon.ErrXTSE3070,
 				"override template %q parameter $%s type %q does not match base type %q",
 				override.Name, op.Name, op.As, bp.As)
 		}
@@ -844,11 +844,11 @@ func checkOverrideModeVisibility(mode, displayMode string, pkg *Stylesheet) erro
 	if pkg.modeDefs != nil {
 		if md, ok := pkg.modeDefs[mode]; ok {
 			if md.Visibility == visFinal {
-				return staticError(errCodeXTSE3060,
+				return staticError(lexicon.ErrXTSE3060,
 					"cannot override templates in final mode %q", displayMode)
 			}
 			if md.Visibility == visPrivate || md.Visibility == visHidden {
-				return staticError(errCodeXTSE3440,
+				return staticError(lexicon.ErrXTSE3440,
 					"cannot override templates in %s mode %q", md.Visibility, displayMode)
 			}
 			return nil
@@ -857,7 +857,7 @@ func checkOverrideModeVisibility(mode, displayMode string, pkg *Stylesheet) erro
 	// Mode not defined in the package — check default visibility
 	defVis := defaultComponentVisibility(pkg)
 	if defVis == visPrivate {
-		return staticError(errCodeXTSE3440,
+		return staticError(lexicon.ErrXTSE3440,
 			"mode %q is not defined in the used package (default visibility is private)", displayMode)
 	}
 	return nil
@@ -874,7 +874,7 @@ func (c *compiler) checkPendingOverrideTypes() error {
 	for _, p := range c.pendingOverrideTypeChecks {
 		same, decided := sameOverrideSchemaType(p.overrideAs, p.overrideNS, c.stylesheet.schemas, p.baseAs, p.basePkg)
 		if decided && !same {
-			return staticError(errCodeXTSE3070,
+			return staticError(lexicon.ErrXTSE3070,
 				"override variable %q type %q does not match base type %q",
 				p.varName, p.overrideAs, p.baseAs)
 		}

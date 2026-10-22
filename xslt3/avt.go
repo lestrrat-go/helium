@@ -5,6 +5,7 @@ import (
 	"strings"
 
 	"github.com/lestrrat-go/helium"
+	"github.com/lestrrat-go/helium/internal/lexicon"
 	"github.com/lestrrat-go/helium/internal/sequence"
 	"github.com/lestrrat-go/helium/internal/xpathstream"
 	"github.com/lestrrat-go/helium/xpath3"
@@ -53,7 +54,7 @@ func (c *compiler) compileAVT(s string, nsBindings map[string]string) (*avt, err
 			// Find matching '}' tracking nesting depth and string literals.
 			end := findAVTExprEnd(s[i+1:])
 			if end < 0 {
-				return nil, staticError(errCodeXTSE0580, "unterminated AVT expression in %q", s)
+				return nil, staticError(lexicon.ErrXTSE0580, "unterminated AVT expression in %q", s)
 			}
 			exprStr := s[i+1 : i+1+end]
 			// Empty expression {} or comment-only expression {(: ... :)}
@@ -64,7 +65,7 @@ func (c *compiler) compileAVT(s string, nsBindings map[string]string) (*avt, err
 			} else {
 				expr, err := c.compileXPath(exprStr, nsBindings)
 				if err != nil {
-					return nil, staticError(errCodeXTSE0580, "invalid XPath in AVT: %v", err)
+					return nil, staticError(lexicon.ErrXTSE0580, "invalid XPath in AVT: %v", err)
 				}
 				parts = append(parts, avtPart{expr: expr})
 			}
@@ -76,7 +77,7 @@ func (c *compiler) compileAVT(s string, nsBindings map[string]string) (*avt, err
 				i += 2
 				continue
 			}
-			return nil, staticError(errCodeXTSE0580, "unmatched } in AVT %q", s)
+			return nil, staticError(lexicon.ErrXTSE0580, "unmatched } in AVT %q", s)
 		default:
 			// literal text until next { or }
 			j := i + 1
@@ -211,7 +212,7 @@ func (a *avt) evaluate(ctx context.Context, node helium.Node) (string, error) {
 				result, err = xpath3.NewEvaluator(xpath3.DefaultEvaluatorOptions).Evaluate(ctx, p.expr, node)
 			}
 			if err != nil {
-				return "", &XSLTError{Code: errCodeXTDE0045, Message: "AVT evaluation error: " + err.Error(), Cause: err}
+				return "", &XSLTError{Code: lexicon.ErrXTDE0045, Message: "AVT evaluation error: " + err.Error(), Cause: err}
 			}
 			// XSLT 1.0 behavior (backwards-compatible processing): when converting
 			// the AVT expression value to a string, all items after the first are
@@ -239,7 +240,7 @@ func (a *avt) evaluateStatic(ctx context.Context, eval xpath3.Evaluator, node he
 		if p.expr != nil {
 			result, err := eval.Evaluate(ctx, p.expr, node)
 			if err != nil {
-				return "", &XSLTError{Code: errCodeXTDE0045, Message: "AVT evaluation error: " + err.Error(), Cause: err}
+				return "", &XSLTError{Code: lexicon.ErrXTDE0045, Message: "AVT evaluation error: " + err.Error(), Cause: err}
 			}
 			sb.WriteString(stringifyResult(result))
 		} else {

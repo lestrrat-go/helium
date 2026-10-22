@@ -20,13 +20,13 @@ func (c *compiler) compileApplyTemplates(ctx context.Context, elem *helium.Eleme
 	// Validate mode name is a valid QName.
 	if mode != "" && mode[0] != '#' {
 		if !xmlchar.IsValidQName(mode) && !isValidEQName(mode) {
-			return nil, staticError(errCodeXTSE0550, "invalid mode name %q on xsl:apply-templates", mode)
+			return nil, staticError(lexicon.ErrXTSE0550, "invalid mode name %q on xsl:apply-templates", mode)
 		}
 		// XTSE0280: check for undeclared prefix.
 		if idx := strings.IndexByte(mode, ':'); idx > 0 {
 			prefix := mode[:idx]
 			if _, ok := c.nsBindings[prefix]; !ok {
-				return nil, staticError(errCodeXTSE0280, "undeclared namespace prefix %q in mode name %q", prefix, mode)
+				return nil, staticError(lexicon.ErrXTSE0280, "undeclared namespace prefix %q in mode name %q", prefix, mode)
 			}
 		}
 	}
@@ -61,19 +61,19 @@ func (c *compiler) compileApplyTemplates(ctx context.Context, elem *helium.Eleme
 		if !ok {
 			// XTSE0010: non-element content not allowed in xsl:apply-templates
 			if isNonWhitespaceTextNode(child) {
-				return nil, staticError(errCodeXTSE0010, "text is not allowed as a child of xsl:apply-templates")
+				return nil, staticError(lexicon.ErrXTSE0010, "text is not allowed as a child of xsl:apply-templates")
 			}
 			continue
 		}
 		if childElem.URI() != lexicon.NamespaceXSLT {
-			return nil, staticError(errCodeXTSE0010, "non-XSLT element %q is not allowed as a child of xsl:apply-templates", childElem.Name())
+			return nil, staticError(lexicon.ErrXTSE0010, "non-XSLT element %q is not allowed as a child of xsl:apply-templates", childElem.Name())
 		}
 		switch childElem.LocalName() {
 		case lexicon.XSLTElementSort:
 			// XTSE1017: @stable only on first xsl:sort
 			if sortCount > 0 {
 				if _, has := childElem.GetAttribute("stable"); has {
-					return nil, staticError(errCodeXTSE1017,
+					return nil, staticError(lexicon.ErrXTSE1017,
 						"the stable attribute is permitted only on the first xsl:sort element")
 				}
 			}
@@ -98,7 +98,7 @@ func (c *compiler) compileApplyTemplates(ctx context.Context, elem *helium.Eleme
 			}
 		default:
 			// XTSE0010: only xsl:sort and xsl:with-param are allowed
-			return nil, staticError(errCodeXTSE0010, "xsl:%s is not allowed as a child of xsl:apply-templates", childElem.LocalName())
+			return nil, staticError(lexicon.ErrXTSE0010, "xsl:%s is not allowed as a child of xsl:apply-templates", childElem.LocalName())
 		}
 	}
 
@@ -113,7 +113,7 @@ func (c *compiler) compileCallTemplate(ctx context.Context, elem *helium.Element
 	}
 	name := strings.TrimSpace(getAttr(elem, xslAttrName))
 	if name == "" {
-		return nil, staticError(errCodeXTSE0110, "xsl:call-template requires name attribute")
+		return nil, staticError(lexicon.ErrXTSE0110, "xsl:call-template requires name attribute")
 	}
 
 	inst := &callTemplateInst{Name: resolveQName(name, c.nsBindings), Compat: c.backwardsCompatible()}
@@ -122,15 +122,15 @@ func (c *compiler) compileCallTemplate(ctx context.Context, elem *helium.Element
 		childElem, ok := child.(*helium.Element)
 		if !ok {
 			if isNonWhitespaceTextNode(child) {
-				return nil, staticError(errCodeXTSE0010, "text is not allowed as a child of xsl:call-template")
+				return nil, staticError(lexicon.ErrXTSE0010, "text is not allowed as a child of xsl:call-template")
 			}
 			continue
 		}
 		if childElem.URI() != lexicon.NamespaceXSLT {
-			return nil, staticError(errCodeXTSE0010, "non-XSLT element %q is not allowed as a child of xsl:call-template", childElem.Name())
+			return nil, staticError(lexicon.ErrXTSE0010, "non-XSLT element %q is not allowed as a child of xsl:call-template", childElem.Name())
 		}
 		if childElem.LocalName() != lexicon.XSLTElementWithParam {
-			return nil, staticError(errCodeXTSE0010, "xsl:%s is not allowed as a child of xsl:call-template", childElem.LocalName())
+			return nil, staticError(lexicon.ErrXTSE0010, "xsl:%s is not allowed as a child of xsl:call-template", childElem.LocalName())
 		}
 		wp, err := c.compileWithParam(ctx, childElem)
 		if err != nil {
@@ -150,7 +150,7 @@ func (c *compiler) compileCallTemplate(ctx context.Context, elem *helium.Element
 func (c *compiler) compileIf(ctx context.Context, elem *helium.Element) (*ifInst, error) {
 	testAttr := getAttr(elem, "test")
 	if testAttr == "" {
-		return nil, staticError(errCodeXTSE0110, "xsl:if requires test attribute")
+		return nil, staticError(lexicon.ErrXTSE0110, "xsl:if requires test attribute")
 	}
 
 	expr, err := c.compileXPath(testAttr, c.nsBindings)
@@ -175,7 +175,7 @@ func (c *compiler) compileChoose(ctx context.Context, elem *helium.Element) (*ch
 		switch child.(type) {
 		case *helium.Text, *helium.CDATASection:
 			if !isXMLWhitespaceOnly(string(child.Content())) {
-				return nil, staticError(errCodeXTSE0010, "text is not allowed as a child of xsl:choose")
+				return nil, staticError(lexicon.ErrXTSE0010, "text is not allowed as a child of xsl:choose")
 			}
 			continue
 		case *helium.Element:
@@ -185,14 +185,14 @@ func (c *compiler) compileChoose(ctx context.Context, elem *helium.Element) (*ch
 		}
 		childElem, _ := helium.AsNode[*helium.Element](child)
 		if childElem.URI() != lexicon.NamespaceXSLT {
-			return nil, staticError(errCodeXTSE0010, "non-XSLT element %q is not allowed as a child of xsl:choose", childElem.Name())
+			return nil, staticError(lexicon.ErrXTSE0010, "non-XSLT element %q is not allowed as a child of xsl:choose", childElem.Name())
 		}
 
 		switch childElem.LocalName() {
 		case lexicon.XSLTElementWhen:
 			// XTSE0010: xsl:when must not appear after xsl:otherwise
 			if hasOtherwise {
-				return nil, staticError(errCodeXTSE0010, "xsl:when must not appear after xsl:otherwise in xsl:choose")
+				return nil, staticError(lexicon.ErrXTSE0010, "xsl:when must not appear after xsl:otherwise in xsl:choose")
 			}
 			// Push element-local namespace declarations into scope
 			savedBindings := c.pushElementNamespaces(ctx, childElem)
@@ -218,7 +218,7 @@ func (c *compiler) compileChoose(ctx context.Context, elem *helium.Element) (*ch
 				c.hasXPathDefaultNS = savedHasNS
 				c.expandText = savedET
 				restoreWhenVersion()
-				return nil, staticError(errCodeXTSE0110, "xsl:when requires test attribute")
+				return nil, staticError(lexicon.ErrXTSE0110, "xsl:when requires test attribute")
 			}
 			expr, err := c.compileXPath(testAttr, c.nsBindings)
 			if err != nil {
@@ -252,7 +252,7 @@ func (c *compiler) compileChoose(ctx context.Context, elem *helium.Element) (*ch
 		case lexicon.XSLTElementOtherwise:
 			// XTSE0010: at most one xsl:otherwise is allowed
 			if hasOtherwise {
-				return nil, staticError(errCodeXTSE0010, "xsl:choose must not contain more than one xsl:otherwise")
+				return nil, staticError(lexicon.ErrXTSE0010, "xsl:choose must not contain more than one xsl:otherwise")
 			}
 			hasOtherwise = true
 			savedNS := c.xpathDefaultNS
@@ -283,13 +283,13 @@ func (c *compiler) compileChoose(ctx context.Context, elem *helium.Element) (*ch
 			inst.Otherwise = body
 		default:
 			// XTSE0010: only xsl:when and xsl:otherwise are allowed inside xsl:choose
-			return nil, staticError(errCodeXTSE0010, "xsl:%s is not allowed as a child of xsl:choose", childElem.LocalName())
+			return nil, staticError(lexicon.ErrXTSE0010, "xsl:%s is not allowed as a child of xsl:choose", childElem.LocalName())
 		}
 	}
 
 	// XTSE0010: xsl:choose must contain at least one xsl:when
 	if len(inst.When) == 0 {
-		return nil, staticError(errCodeXTSE0010, "xsl:choose must contain at least one xsl:when")
+		return nil, staticError(lexicon.ErrXTSE0010, "xsl:choose must contain at least one xsl:when")
 	}
 
 	return inst, nil
@@ -303,7 +303,7 @@ func (c *compiler) compileForEach(ctx context.Context, elem *helium.Element) (*f
 
 	selectAttr := getAttr(elem, "select")
 	if selectAttr == "" {
-		return nil, staticError(errCodeXTSE0110, "xsl:for-each requires select attribute")
+		return nil, staticError(lexicon.ErrXTSE0110, "xsl:for-each requires select attribute")
 	}
 
 	expr, err := c.compileXPath(selectAttr, c.nsBindings)
@@ -323,12 +323,12 @@ func (c *compiler) compileForEach(ctx context.Context, elem *helium.Element) (*f
 		}
 		if childElem.URI() == lexicon.NamespaceXSLT && childElem.LocalName() == lexicon.XSLTElementSort {
 			if pastSortContent {
-				return nil, staticError(errCodeXTSE0010, "xsl:sort must come before other content in xsl:for-each")
+				return nil, staticError(lexicon.ErrXTSE0010, "xsl:sort must come before other content in xsl:for-each")
 			}
 			// XTSE1017: @stable only on first xsl:sort
 			if sortCount > 0 {
 				if _, has := childElem.GetAttribute("stable"); has {
-					return nil, staticError(errCodeXTSE1017,
+					return nil, staticError(lexicon.ErrXTSE1017,
 						"the stable attribute is permitted only on the first xsl:sort element")
 				}
 			}
@@ -439,7 +439,7 @@ func (c *compiler) compileSortKey(ctx context.Context, elem *helium.Element) (*s
 	selectAttr := getAttr(elem, "select")
 	// XTSE1015: xsl:sort with select must not have content
 	if selectAttr != "" && c.hasEffectiveContent(ctx, elem) {
-		return nil, staticError(errCodeXTSE1015, "xsl:sort with a select attribute must not have content")
+		return nil, staticError(lexicon.ErrXTSE1015, "xsl:sort with a select attribute must not have content")
 	}
 	if selectAttr != "" {
 		expr, err := c.compileXPath(selectAttr, c.nsBindings)
@@ -520,7 +520,7 @@ func (c *compiler) compileSortKey(ctx context.Context, elem *helium.Element) (*s
 func checkDuplicateWithParam(params []*withParam, wp *withParam) error {
 	for _, prev := range params {
 		if prev.Name == wp.Name {
-			return staticError(errCodeXTSE0670, "duplicate xsl:with-param name %q", wp.Name)
+			return staticError(lexicon.ErrXTSE0670, "duplicate xsl:with-param name %q", wp.Name)
 		}
 	}
 	return nil
@@ -551,7 +551,7 @@ func (c *compiler) compileWithParam(ctx context.Context, elem *helium.Element) (
 
 	name := getAttr(elem, "name")
 	if name == "" {
-		return nil, staticError(errCodeXTSE0110, "xsl:with-param requires name attribute")
+		return nil, staticError(lexicon.ErrXTSE0110, "xsl:with-param requires name attribute")
 	}
 
 	// Validate tunnel attribute value if present (including empty string)
@@ -577,7 +577,7 @@ func (c *compiler) compileWithParam(ctx context.Context, elem *helium.Element) (
 	if selectAttr != "" {
 		// XTSE0620: select and non-empty content are mutually exclusive.
 		if err := c.validateEmptyElement(ctx, elem, "xsl:with-param"); err != nil {
-			return nil, staticError(errCodeXTSE0620, "xsl:with-param %q has both @select and content", name)
+			return nil, staticError(lexicon.ErrXTSE0620, "xsl:with-param %q has both @select and content", name)
 		}
 		expr, err := c.compileXPath(selectAttr, c.nsBindings)
 		if err != nil {
@@ -614,11 +614,11 @@ func (c *compiler) compilePerformSort(ctx context.Context, elem *helium.Element)
 			if childElem.URI() == lexicon.NamespaceXSLT {
 				ln := childElem.LocalName()
 				if ln != lexicon.XSLTElementSort && ln != "fallback" {
-					return nil, staticError(errCodeXTSE1040,
+					return nil, staticError(lexicon.ErrXTSE1040,
 						"xsl:perform-sort with select attribute must not contain xsl:%s", ln)
 				}
 			} else {
-				return nil, staticError(errCodeXTSE1040,
+				return nil, staticError(lexicon.ErrXTSE1040,
 					"xsl:perform-sort with select attribute must not contain non-XSLT content")
 			}
 		}
@@ -634,12 +634,12 @@ func (c *compiler) compilePerformSort(ctx context.Context, elem *helium.Element)
 		}
 		if childElem.URI() == lexicon.NamespaceXSLT && childElem.LocalName() == lexicon.XSLTElementSort {
 			if pastSort {
-				return nil, staticError(errCodeXTSE0010, "xsl:sort must come before other content in xsl:perform-sort")
+				return nil, staticError(lexicon.ErrXTSE0010, "xsl:sort must come before other content in xsl:perform-sort")
 			}
 			// XTSE1017: @stable only on first xsl:sort
 			if sortCount > 0 {
 				if _, has := childElem.GetAttribute("stable"); has {
-					return nil, staticError(errCodeXTSE1017,
+					return nil, staticError(lexicon.ErrXTSE1017,
 						"the stable attribute is permitted only on the first xsl:sort element")
 				}
 			}
@@ -698,15 +698,15 @@ func (c *compiler) compileApplyImports(ctx context.Context, elem *helium.Element
 		childElem, ok := child.(*helium.Element)
 		if !ok {
 			if isNonWhitespaceTextNode(child) {
-				return nil, staticError(errCodeXTSE0010, "text is not allowed as a child of xsl:apply-imports")
+				return nil, staticError(lexicon.ErrXTSE0010, "text is not allowed as a child of xsl:apply-imports")
 			}
 			continue
 		}
 		if childElem.URI() != lexicon.NamespaceXSLT {
-			return nil, staticError(errCodeXTSE0010, "non-XSLT element %q is not allowed as a child of xsl:apply-imports", childElem.Name())
+			return nil, staticError(lexicon.ErrXTSE0010, "non-XSLT element %q is not allowed as a child of xsl:apply-imports", childElem.Name())
 		}
 		if childElem.LocalName() != lexicon.XSLTElementWithParam {
-			return nil, staticError(errCodeXTSE0010, "xsl:%s is not allowed as a child of xsl:apply-imports", childElem.LocalName())
+			return nil, staticError(lexicon.ErrXTSE0010, "xsl:%s is not allowed as a child of xsl:apply-imports", childElem.LocalName())
 		}
 		wp, err := c.compileWithParam(ctx, childElem)
 		if err != nil {
@@ -745,7 +745,7 @@ func (c *compiler) compileTry(ctx context.Context, elem *helium.Element) (*tryCa
 			if inst.Select != nil {
 				if tn, isText := child.(*helium.Text); isText {
 					if !isXMLWhitespaceOnly(string(tn.Content())) {
-						return nil, staticError(errCodeXTSE3140, "xsl:try with select attribute must not have non-catch/fallback children")
+						return nil, staticError(lexicon.ErrXTSE3140, "xsl:try with select attribute must not have non-catch/fallback children")
 					}
 				}
 			}
@@ -774,7 +774,7 @@ func (c *compiler) compileTry(ctx context.Context, elem *helium.Element) (*tryCa
 			// XTSE3150: xsl:catch with select must have empty content.
 			if sel := getAttr(childElem, "select"); sel != "" {
 				if hasNonEmptyContent(childElem) {
-					return nil, staticError(errCodeXTSE3150, "xsl:catch with select attribute must have empty content")
+					return nil, staticError(lexicon.ErrXTSE3150, "xsl:catch with select attribute must have empty content")
 				}
 				expr, err := c.compileXPath(sel, c.nsBindings)
 				if err != nil {
@@ -796,7 +796,7 @@ func (c *compiler) compileTry(ctx context.Context, elem *helium.Element) (*tryCa
 		} else {
 			// XTSE3140: when select is present, only xsl:catch and xsl:fallback are allowed.
 			if inst.Select != nil {
-				return nil, staticError(errCodeXTSE3140, "xsl:try with select attribute must not have non-catch/fallback children")
+				return nil, staticError(lexicon.ErrXTSE3140, "xsl:try with select attribute must not have non-catch/fallback children")
 			}
 			childInst, err := c.compileInstruction(ctx, childElem)
 			if err != nil {
@@ -814,7 +814,7 @@ func (c *compiler) compileTry(ctx context.Context, elem *helium.Element) (*tryCa
 func (c *compiler) compileForEachGroup(ctx context.Context, elem *helium.Element) (*forEachGroupInst, error) {
 	selectAttr := getAttr(elem, "select")
 	if selectAttr == "" {
-		return nil, staticError(errCodeXTSE0110, "xsl:for-each-group requires select attribute")
+		return nil, staticError(lexicon.ErrXTSE0110, "xsl:for-each-group requires select attribute")
 	}
 
 	// XTSE1080: exactly one of group-by, group-adjacent, group-starting-with,
@@ -833,10 +833,10 @@ func (c *compiler) compileForEachGroup(ctx context.Context, elem *helium.Element
 		groupingCount++
 	}
 	if groupingCount == 0 {
-		return nil, staticError(errCodeXTSE1080, "xsl:for-each-group requires one of group-by, group-adjacent, group-starting-with, or group-ending-with")
+		return nil, staticError(lexicon.ErrXTSE1080, "xsl:for-each-group requires one of group-by, group-adjacent, group-starting-with, or group-ending-with")
 	}
 	if groupingCount > 1 {
-		return nil, staticError(errCodeXTSE1080, "xsl:for-each-group must have at most one of group-by, group-adjacent, group-starting-with, or group-ending-with")
+		return nil, staticError(lexicon.ErrXTSE1080, "xsl:for-each-group must have at most one of group-by, group-adjacent, group-starting-with, or group-ending-with")
 	}
 
 	// XTSE1090: collation/composite only with group-by or group-adjacent
@@ -844,11 +844,11 @@ func (c *compiler) compileForEachGroup(ctx context.Context, elem *helium.Element
 	hasGroupAdjacent := getAttr(elem, "group-adjacent") != ""
 	if !hasGroupBy && !hasGroupAdjacent {
 		if getAttr(elem, "collation") != "" {
-			return nil, staticError(errCodeXTSE1090,
+			return nil, staticError(lexicon.ErrXTSE1090,
 				"collation attribute on xsl:for-each-group requires group-by or group-adjacent")
 		}
 		if getAttr(elem, "composite") != "" {
-			return nil, staticError(errCodeXTSE1090,
+			return nil, staticError(lexicon.ErrXTSE1090,
 				"composite attribute on xsl:for-each-group requires group-by or group-adjacent")
 		}
 	}
@@ -917,7 +917,7 @@ func (c *compiler) compileForEachGroup(ctx context.Context, elem *helium.Element
 				// XTSE1017: @stable only on first xsl:sort
 				if sortCount > 0 {
 					if _, has := v.GetAttribute("stable"); has {
-						return nil, staticError(errCodeXTSE1017,
+						return nil, staticError(lexicon.ErrXTSE1017,
 							"the stable attribute is permitted only on the first xsl:sort element")
 					}
 				}
@@ -960,11 +960,11 @@ func (c *compiler) compileForEachGroup(ctx context.Context, elem *helium.Element
 func (c *compiler) compileAnalyzeString(ctx context.Context, elem *helium.Element) (*analyzeStringInst, error) {
 	selectAttr := getAttr(elem, "select")
 	if selectAttr == "" {
-		return nil, staticError(errCodeXTSE0110, "xsl:analyze-string requires select attribute")
+		return nil, staticError(lexicon.ErrXTSE0110, "xsl:analyze-string requires select attribute")
 	}
 	regexAttr, regexFound := elem.GetAttribute("regex")
 	if !regexFound {
-		return nil, staticError(errCodeXTSE0110, "xsl:analyze-string requires regex attribute")
+		return nil, staticError(lexicon.ErrXTSE0110, "xsl:analyze-string requires regex attribute")
 	}
 
 	selectExpr, err := c.compileXPath(selectAttr, c.nsBindings)
@@ -1012,7 +1012,7 @@ func (c *compiler) compileAnalyzeString(ctx context.Context, elem *helium.Elemen
 		switch childElem.LocalName() {
 		case lexicon.XSLTElementMatchingSubstring:
 			if phase >= phaseMatching {
-				return nil, staticError(errCodeXTSE0010, "xsl:matching-substring must precede xsl:non-matching-substring and xsl:fallback")
+				return nil, staticError(lexicon.ErrXTSE0010, "xsl:matching-substring must precede xsl:non-matching-substring and xsl:fallback")
 			}
 			phase = phaseMatching
 			body, err := c.compileChildren(ctx, childElem)
@@ -1022,7 +1022,7 @@ func (c *compiler) compileAnalyzeString(ctx context.Context, elem *helium.Elemen
 			inst.MatchingBody = body
 		case lexicon.XSLTElementNonMatchingSubstring:
 			if phase >= phaseNonMatch {
-				return nil, staticError(errCodeXTSE0010, "xsl:non-matching-substring out of order in xsl:analyze-string")
+				return nil, staticError(lexicon.ErrXTSE0010, "xsl:non-matching-substring out of order in xsl:analyze-string")
 			}
 			phase = phaseNonMatch
 			body, err := c.compileChildren(ctx, childElem)
@@ -1037,7 +1037,7 @@ func (c *compiler) compileAnalyzeString(ctx context.Context, elem *helium.Elemen
 
 	// XTSE1130: at least one of matching-substring or non-matching-substring is required
 	if len(inst.MatchingBody) == 0 && len(inst.NonMatchingBody) == 0 {
-		return nil, staticError(errCodeXTSE1130, "xsl:analyze-string must contain xsl:matching-substring or xsl:non-matching-substring")
+		return nil, staticError(lexicon.ErrXTSE1130, "xsl:analyze-string must contain xsl:matching-substring or xsl:non-matching-substring")
 	}
 
 	return inst, nil
@@ -1050,7 +1050,7 @@ func (c *compiler) compileEvaluate(ctx context.Context, elem *helium.Element) (i
 	// xpath attribute is required
 	xpathAttr := getAttr(elem, "xpath")
 	if xpathAttr == "" {
-		return nil, staticError(errCodeXTSE0010, "xsl:evaluate requires an xpath attribute")
+		return nil, staticError(lexicon.ErrXTSE0010, "xsl:evaluate requires an xpath attribute")
 	}
 	expr, err := c.compileXPath(xpathAttr, c.nsBindings)
 	if err != nil {
@@ -1129,7 +1129,7 @@ func (c *compiler) compileEvaluate(ctx context.Context, elem *helium.Element) (i
 		} else if childElem.LocalName() == lexicon.XSLTElementFallback {
 			// skip
 		} else {
-			return nil, staticError(errCodeXTSE0010, "xsl:evaluate may only contain xsl:with-param or xsl:fallback, found xsl:%s", childElem.LocalName())
+			return nil, staticError(lexicon.ErrXTSE0010, "xsl:evaluate may only contain xsl:with-param or xsl:fallback, found xsl:%s", childElem.LocalName())
 		}
 	}
 

@@ -986,11 +986,3 @@ func formatSequenceType(st sequenceType) string {
 	}
 	return st.ItemType + string(st.Occurrence)
 }
-
-// XSLT type error codes.
-const (
-	errCodeXTTE0505 = "XTTE0505" // template return type mismatch
-	errCodeXTTE0570 = "XTTE0570" // variable/param type mismatch
-	errCodeXTTE0780 = "XTTE0780" // function return type mismatch
-	errCodeXTTE0790 = "XTTE0790" // function parameter type mismatch
-)

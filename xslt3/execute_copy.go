@@ -73,7 +73,7 @@ func (ec *execContext) execCopy(ctx context.Context, inst *copyInst) error {
 		}
 		// XTTE3180: xsl:copy select must produce at most one item.
 		if sequence.Len(seq) > 1 {
-			return dynamicError(errCodeXTTE3180,
+			return dynamicError(lexicon.ErrXTTE3180,
 				"xsl:copy select produced %d items; at most one is allowed", sequence.Len(seq))
 		}
 		for item := range sequence.Items(seq) {
@@ -130,7 +130,7 @@ func (ec *execContext) execCopy(ctx context.Context, inst *copyInst) error {
 			}
 			return nil
 		}
-		return dynamicError(errCodeXTTE0945, "xsl:copy: no context item")
+		return dynamicError(lexicon.ErrXTTE0945, "xsl:copy: no context item")
 	}
 	// XTTE1535: if type or validation attribute is specified on xsl:copy and the
 	// context item is not an element or document node, signal a type error.
@@ -139,12 +139,12 @@ func (ec *execContext) execCopy(ctx context.Context, inst *copyInst) error {
 		nt := contextNode.Type()
 		if nt != helium.ElementNode && nt != helium.DocumentNode {
 			if inst.Validation == validationStrict || inst.Validation == validationLax {
-				return dynamicError(errCodeXTTE1535,
+				return dynamicError(lexicon.ErrXTTE1535,
 					"xsl:copy validation=%q: context node is %s, not an element or document node",
 					inst.Validation, nt)
 			}
 			if inst.TypeName != "" && ec.isComplexType(inst.TypeName) {
-				return dynamicError(errCodeXTTE1535,
+				return dynamicError(lexicon.ErrXTTE1535,
 					"xsl:copy type=%q: context node is %s, not an element or document node",
 					inst.TypeName, nt)
 			}
@@ -176,7 +176,7 @@ func (ec *execContext) applyCopyValidation(ctx context.Context, inst *copyInst, 
 		// the item being copied is an attribute node, that is a type error.
 		if sourceNode != nil && sourceNode.Type() == helium.AttributeNode {
 			if ec.isComplexTypeName(inst.TypeName) {
-				return dynamicError(errCodeXTTE1535,
+				return dynamicError(lexicon.ErrXTTE1535,
 					"xsl:copy type=%q refers to a complex type, but copied item is an attribute node", inst.TypeName)
 			}
 			// For simple types on attribute nodes, validate the attribute value
@@ -186,7 +186,7 @@ func (ec *execContext) applyCopyValidation(ctx context.Context, inst *copyInst, 
 				typeName := normalizeTypeName(inst.TypeName, ec)
 				content := string(attr.Content())
 				if castErr := ec.validateAttributeValueForType(ctx, content, typeName); castErr != nil {
-					return dynamicError(errCodeXTTE1510,
+					return dynamicError(lexicon.ErrXTTE1510,
 						"xsl:copy: attribute value %q does not match type %s: %v", content, inst.TypeName, castErr)
 				}
 			}
@@ -195,8 +195,8 @@ func (ec *execContext) applyCopyValidation(ctx context.Context, inst *copyInst, 
 		copiedElem := findCopiedElement(out, lastBefore, pendingBefore)
 		if copiedElem != nil {
 			if err := ec.validateAndNormalizeElementContent(ctx, copiedElem, inst.TypeName); err != nil {
-				if xsltErr, ok := errors.AsType[*XSLTError](err); ok && xsltErr.Code == errCodeXTTE1510 {
-					return dynamicError(errCodeXTTE1540,
+				if xsltErr, ok := errors.AsType[*XSLTError](err); ok && xsltErr.Code == lexicon.ErrXTTE1510 {
+					return dynamicError(lexicon.ErrXTTE1540,
 						"element content does not match declared type %s: %v", inst.TypeName, xsltErr.Message)
 				}
 				return err
@@ -438,12 +438,12 @@ func (ec *execContext) execCopyNode(ctx context.Context, node helium.Node, opts 
 		elem, ok := out.current.(*helium.Element)
 		if !ok {
 			// XTDE0410: adding attribute to non-element
-			return dynamicError(errCodeXTDE0410,
+			return dynamicError(lexicon.ErrXTDE0410,
 				"cannot add attribute %s to a non-element node", attr.Name())
 		}
 		if elem.FirstChild() != nil {
 			// XTDE0410: adding attribute after child content
-			return dynamicError(errCodeXTDE0410,
+			return dynamicError(lexicon.ErrXTDE0410,
 				"cannot add attribute %s after child nodes have been added", attr.Name())
 		}
 		copyAttributeToElement(elem, attr)
@@ -488,11 +488,11 @@ func (ec *execContext) execCopyOf(ctx context.Context, inst *copyOfInst) error {
 			// validation="preserve" (without parent element).
 			if preserve {
 				if !copyNS && ec.nodeHasNamespaceSensitiveContent(v.Node) {
-					return dynamicError(errCodeXTTE0950,
+					return dynamicError(lexicon.ErrXTTE0950,
 						"copy-of: cannot copy namespace-sensitive content with copy-namespaces=\"no\" and validation=\"preserve\"")
 				}
 				if v.Node.Type() == helium.AttributeNode && ec.nodeHasNamespaceSensitiveContent(v.Node) {
-					return dynamicError(errCodeXTTE0950,
+					return dynamicError(lexicon.ErrXTTE0950,
 						"copy-of: cannot copy attribute with namespace-sensitive content without parent element (validation=\"preserve\")")
 				}
 			}
@@ -526,13 +526,13 @@ func (ec *execContext) execCopyOf(ctx context.Context, inst *copyOfInst) error {
 				if v.Node.Type() == helium.AttributeNode {
 					// XTTE1535: complex type on an attribute node is an error.
 					if ec.isComplexTypeName(inst.TypeName) {
-						return dynamicError(errCodeXTTE1535,
+						return dynamicError(lexicon.ErrXTTE1535,
 							"copy-of type=%q refers to a complex type, but copied item is an attribute node", inst.TypeName)
 					}
 					if attr, ok := v.Node.(*helium.Attribute); ok {
 						typeName := normalizeTypeName(inst.TypeName, ec)
 						if castErr := ec.validateAttributeValueForType(ctx, attr.Value(), typeName); castErr != nil {
-							return dynamicError(errCodeXTTE1510,
+							return dynamicError(lexicon.ErrXTTE1510,
 								"copy-of: attribute value %q is not valid for type %s: %v", attr.Value(), inst.TypeName, castErr)
 						}
 					}
@@ -541,8 +541,8 @@ func (ec *execContext) execCopyOf(ctx context.Context, inst *copyOfInst) error {
 				copiedElem := findCopiedElement(out, lastBefore, pendingBefore)
 				if copiedElem != nil {
 					if err := ec.validateAndNormalizeElementContent(ctx, copiedElem, inst.TypeName); err != nil {
-						if xsltErr, ok := errors.AsType[*XSLTError](err); ok && xsltErr.Code == errCodeXTTE1510 {
-							return dynamicError(errCodeXTTE1540,
+						if xsltErr, ok := errors.AsType[*XSLTError](err); ok && xsltErr.Code == lexicon.ErrXTTE1510 {
+							return dynamicError(lexicon.ErrXTTE1540,
 								"copy-of: element content does not match declared type %s: %v", inst.TypeName, xsltErr.Message)
 						}
 						return err
@@ -895,12 +895,12 @@ func (ec *execContext) copyNodeToOutput(node helium.Node, copyNamespaces ...bool
 		elem, ok := out.current.(*helium.Element)
 		if !ok {
 			// XTDE0410: adding attribute to non-element
-			return dynamicError(errCodeXTDE0410,
+			return dynamicError(lexicon.ErrXTDE0410,
 				"cannot add attribute %s to a non-element node", attr.Name())
 		}
 		if elem.FirstChild() != nil {
 			// XTDE0410: adding attribute after child content
-			return dynamicError(errCodeXTDE0410,
+			return dynamicError(lexicon.ErrXTDE0410,
 				"cannot add attribute %s after child nodes have been added", attr.Name())
 		}
 		copyAttributeToElement(elem, attr)
@@ -944,7 +944,7 @@ func (ec *execContext) copyNodeToOutput(node helium.Node, copyNamespaces ...bool
 					_ = elem.SetActiveNamespace(newPrefix, origURI)
 					break
 				}
-				return dynamicError(errCodeXTDE0430,
+				return dynamicError(lexicon.ErrXTDE0430,
 					"namespace prefix %q is already bound to %q; cannot rebind to %q", prefix, ns.URI(), uri)
 			}
 		}
@@ -1147,7 +1147,7 @@ func (ec *execContext) checkCopyAccumulators(node helium.Node) error {
 	if ec.activeAccumulators != nil {
 		for name := range accumulators {
 			if _, ok := ec.activeAccumulators[name]; !ok {
-				return dynamicError(errCodeXTDE3362,
+				return dynamicError(lexicon.ErrXTDE3362,
 					"accumulator %q is not applicable to the source document (copy-accumulators)", name)
 			}
 		}
@@ -1173,7 +1173,7 @@ func (ec *execContext) checkCopyAccumulators(node helium.Node) error {
 	// use-accumulators attribute. For the initial source document,
 	// accumulators are only applicable if the mode declares them.
 	if md == nil {
-		return dynamicError(errCodeXTDE3362,
+		return dynamicError(lexicon.ErrXTDE3362,
 			"copy-accumulators requires use-accumulators on the processing mode")
 	}
 	// When use-accumulators attribute is absent (nil), the default is
@@ -1191,7 +1191,7 @@ func (ec *execContext) checkCopyAccumulators(node helium.Node) error {
 	}
 	for name := range accumulators {
 		if _, ok := allowed[name]; !ok {
-			return dynamicError(errCodeXTDE3362,
+			return dynamicError(lexicon.ErrXTDE3362,
 				"accumulator %q is not applicable to the source document (copy-accumulators)", name)
 		}
 	}
@@ -1286,7 +1286,7 @@ func (ec *execContext) validateAttributeValueForType(ctx context.Context, value,
 		return castErr
 	}
 	var xe *xpath3.XPathError
-	if errors.As(castErr, &xe) && xe.Code != "XPTY0004" {
+	if errors.As(castErr, &xe) && xe.Code != lexicon.ErrXPTY0004 {
 		return castErr
 	}
 	return ec.schemaRegistry.ValidateCast(ctx, value, typeName)

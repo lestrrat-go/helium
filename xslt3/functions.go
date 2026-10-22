@@ -46,7 +46,7 @@ func (ec *execContext) xsltFunctions() map[string]xpath3.Function {
 	}
 	ec.cachedFns = map[string]xpath3.Function{
 		"nilled":                    &xsltFunc{min: 0, max: 1, fn: ec.fnNilled},
-		fnNameCurrent:               &xsltFunc{min: 0, max: 0, fn: ec.fnCurrent, noDynRef: true, dynRefError: errCodeXTDE1360},
+		fnNameCurrent:               &xsltFunc{min: 0, max: 0, fn: ec.fnCurrent, noDynRef: true, dynRefError: lexicon.ErrXTDE1360},
 		fnNameDocument:              &xsltFunc{min: 1, max: 2, fn: ec.fnDocument},
 		"key":                       &xsltFunc{min: 2, max: 3, fn: ec.fnKey},
 		"generate-id":               &xsltFunc{min: 0, max: 1, fn: ec.fnGenerateID},
@@ -56,8 +56,8 @@ func (ec *execContext) xsltFunctions() map[string]xpath3.Function {
 		fnNameElementAvailable:      &xsltFunc{min: 1, max: 1, fn: ec.fnElementAvailable},
 		fnNameFunctionAvailable:     &xsltFunc{min: 1, max: 2, fn: ec.fnFunctionAvailable},
 		fnNameTypeAvailable:         &xsltFunc{min: 1, max: 1, fn: ec.fnTypeAvailable},
-		fnNameCurrentGroup:          &xsltFunc{min: 0, max: 0, fn: ec.fnCurrentGroup, noDynRef: true, dynRefError: errCodeXTDE1061},
-		fnNameCurrentGroupingKey:    &xsltFunc{min: 0, max: 0, fn: ec.fnCurrentGroupingKey, noDynRef: true, dynRefError: errCodeXTDE1071},
+		fnNameCurrentGroup:          &xsltFunc{min: 0, max: 0, fn: ec.fnCurrentGroup, noDynRef: true, dynRefError: lexicon.ErrXTDE1061},
+		fnNameCurrentGroupingKey:    &xsltFunc{min: 0, max: 0, fn: ec.fnCurrentGroupingKey, noDynRef: true, dynRefError: lexicon.ErrXTDE1071},
 		"accumulator-before": &xsltFunc{min: 1, max: 1, fn: func(ctx context.Context, args []xpath3.Sequence) (xpath3.Sequence, error) {
 			return ec.accumulatorLookup(ctx, args, "accumulator-before", func() (map[helium.Node]map[string]xpath3.Sequence, map[helium.Node]map[string]error) {
 				return ec.accumulatorBeforeByNode, ec.accumulatorBeforeErrorByNode
@@ -222,7 +222,7 @@ func (ec *execContext) fnCurrent(_ context.Context, _ []xpath3.Sequence) (xpath3
 	}
 	if ec.currentNode == nil {
 		// XTDE1360: current() called when context item is absent
-		return nil, dynamicError(errCodeXTDE1360,
+		return nil, dynamicError(lexicon.ErrXTDE1360,
 			"current() called when context item is absent")
 	}
 	return xpath3.SingleNode(ec.currentNode), nil
@@ -256,7 +256,7 @@ func (ec *execContext) fnDocument(ctx context.Context, args []xpath3.Sequence) (
 			} else if !nodeHasDocumentRoot(ni.Node) {
 				// XTDE1162: second argument is an orphan node (no
 				// document root) with no base URI.
-				return nil, dynamicError(errCodeXTDE1162,
+				return nil, dynamicError(lexicon.ErrXTDE1162,
 					"document() second argument node has no base URI")
 			}
 			// Node belongs to a document tree but the document has no
@@ -276,7 +276,7 @@ func (ec *execContext) fnDocument(ctx context.Context, args []xpath3.Sequence) (
 				} else if !nodeHasDocumentRoot(ni.Node) {
 					// XTDE1162: first argument node has no base URI
 					// and no document root (parentless text node).
-					return nil, dynamicError(errCodeXTDE1162,
+					return nil, dynamicError(lexicon.ErrXTDE1162,
 						"document() argument node has no base URI")
 				}
 			}
@@ -353,7 +353,7 @@ func (ec *execContext) loadDocument(ctx context.Context, uri string, baseDir str
 		if ec.sourceDoc != nil {
 			return ec.sourceDoc, nil
 		}
-		return nil, dynamicError(errCodeFODC0002, "cannot load document %q: no source document", uri)
+		return nil, dynamicError(lexicon.ErrFODC0002, "cannot load document %q: no source document", uri)
 	}
 
 	// Empty string means the stylesheet module itself (XSLT spec 14.1).
@@ -408,10 +408,10 @@ func (ec *execContext) loadDocument(ctx context.Context, uri string, baseDir str
 		// XTDE1160: when the URI contains a fragment identifier, use XTDE1160
 		// (fragment identifier error) instead of FODC0002.
 		if strings.ContainsRune(uri, '#') {
-			return nil, dynamicErrorCause(errCodeXTDE1160, err,
+			return nil, dynamicErrorCause(lexicon.ErrXTDE1160, err,
 				"cannot load document %q with fragment identifier: %v", uri, err)
 		}
-		return nil, dynamicErrorCause(errCodeFODC0002, err, "cannot load document %q: %v", uri, err)
+		return nil, dynamicErrorCause(lexicon.ErrFODC0002, err, "cannot load document %q: %v", uri, err)
 	}
 	// helium's parser currently rejects literal U+FFFD from RuneCursor-backed
 	// input, but accepts the equivalent character reference. Normalizing here
@@ -430,7 +430,7 @@ func (ec *execContext) loadDocument(ctx context.Context, uri string, baseDir str
 			return p.DefaultDTDAttributes(true).FixBaseURIs(false)
 		}, ec.resourceLimit())
 	if err != nil {
-		return nil, dynamicError(errCodeFODC0002, "cannot parse document %q: %v", uri, err)
+		return nil, dynamicError(lexicon.ErrFODC0002, "cannot parse document %q: %v", uri, err)
 	}
 
 	doc.SetURL(resolvedURI)

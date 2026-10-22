@@ -222,14 +222,14 @@ func (ec *execContext) buildKeyTable(ctx context.Context, name string, root heli
 			// any key circularity is an error. In XSLT 3.0, circularity
 			// outside use-expression context (e.g., in a match pattern
 			// or variable binding) is also an error.
-			return nil, dynamicError(errCodeXTDE0640,
+			return nil, dynamicError(lexicon.ErrXTDE0640,
 				"circular reference in key %q", name)
 		}
 	}
 
 	defs, ok := ec.effectiveKeys()[name]
 	if !ok || len(defs) == 0 {
-		return nil, dynamicError(errCodeXTDE1170, "unknown key %q", name)
+		return nil, dynamicError(lexicon.ErrXTDE1170, "unknown key %q", name)
 	}
 
 	composite := len(defs) > 0 && defs[0].Composite

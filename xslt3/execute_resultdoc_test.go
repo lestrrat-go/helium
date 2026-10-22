@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/lestrrat-go/helium"
+	"github.com/lestrrat-go/helium/internal/lexicon"
 	"github.com/lestrrat-go/helium/xpath3"
 	"github.com/lestrrat-go/helium/xslt3"
 	"github.com/stretchr/testify/require"
@@ -31,7 +32,7 @@ func TestResultDocument(t *testing.T) {
 			BaseOutputURI("file:///base/dir/main.xml").
 			Do(t.Context())
 		require.Error(t, err, "two result documents resolving to the same canonical URI must fail")
-		require.Contains(t, err.Error(), "XTDE1490")
+		require.Contains(t, err.Error(), lexicon.ErrXTDE1490)
 	})
 
 	// A-007: an xsl:result-document format AVT that raises a dynamic error
@@ -47,7 +48,7 @@ func TestResultDocument(t *testing.T) {
 
 		_, err := ss.Transform(parseTransformSource(t)).Do(t.Context())
 		require.Error(t, err, "a dynamic error in the format AVT must not be swallowed")
-		require.True(t, strings.Contains(err.Error(), "idiv") || strings.Contains(err.Error(), "FOAR0001") ||
+		require.True(t, strings.Contains(err.Error(), "idiv") || strings.Contains(err.Error(), lexicon.ErrFOAR0001) ||
 			strings.Contains(err.Error(), "division") || strings.Contains(err.Error(), "zero"),
 			"error should reflect the division-by-zero dynamic error, got: %v", err)
 	})
@@ -93,7 +94,7 @@ func TestResultDocument(t *testing.T) {
 			BaseOutputURI("file:///base/dir/main.xml").
 			Do(t.Context())
 		require.Error(t, err, "relative and absolute file: hrefs denoting the same file must collide")
-		require.Contains(t, err.Error(), "XTDE1490")
+		require.Contains(t, err.Error(), lexicon.ErrXTDE1490)
 	})
 
 	// A primary xsl:result-document whose serialization parameter AVT raises a
@@ -314,7 +315,7 @@ func TestResultDocument(t *testing.T) {
 			BaseOutputURI("file:///base/dir/main.xml").
 			Do(t.Context())
 		require.Error(t, err, "two absolute file: hrefs denoting the same file (after dot-segment collapse) must collide")
-		require.Contains(t, err.Error(), "XTDE1490")
+		require.Contains(t, err.Error(), lexicon.ErrXTDE1490)
 	})
 
 	// Inside a secondary result-document, a NESTED secondary result-document that
@@ -343,7 +344,7 @@ func TestResultDocument(t *testing.T) {
 			BaseOutputURI("file:///base/dir/main.xml").
 			Do(t.Context())
 		require.Error(t, err, "nested relative and absolute file: hrefs denoting the same file must collide")
-		require.Contains(t, err.Error(), "XTDE1490")
+		require.Contains(t, err.Error(), lexicon.ErrXTDE1490)
 	})
 
 	// XSLT3-ADV-001: every error-prone serialization AVT on xsl:result-document must
@@ -374,7 +375,7 @@ func TestResultDocument(t *testing.T) {
 
 				_, err := ss.Transform(parseTransformSource(t)).Do(t.Context())
 				require.Error(t, err, "a dynamic error in the %s AVT must not be swallowed", tc.name)
-				require.True(t, strings.Contains(err.Error(), "idiv") || strings.Contains(err.Error(), "FOAR0001") ||
+				require.True(t, strings.Contains(err.Error(), "idiv") || strings.Contains(err.Error(), lexicon.ErrFOAR0001) ||
 					strings.Contains(err.Error(), "division") || strings.Contains(err.Error(), "zero"),
 					"error should reflect the division-by-zero dynamic error, got: %v", err)
 			})
@@ -558,7 +559,7 @@ func TestResultDocument(t *testing.T) {
 			BaseOutputURI("file:///base/dir/main.xml").
 			Do(t.Context())
 		require.Error(t, err, "a secondary href resolving to the principal output URI must collide")
-		require.Contains(t, err.Error(), "XTDE1490")
+		require.Contains(t, err.Error(), lexicon.ErrXTDE1490)
 	})
 
 	// XSLT3-101: an absolute secondary href equal to the principal (base) output URI
@@ -575,7 +576,7 @@ func TestResultDocument(t *testing.T) {
 			BaseOutputURI("file:///base/dir/main.xml").
 			Do(t.Context())
 		require.Error(t, err, "an absolute secondary href equal to the principal output URI must collide")
-		require.Contains(t, err.Error(), "XTDE1490")
+		require.Contains(t, err.Error(), lexicon.ErrXTDE1490)
 	})
 
 	// XSLT3-101: a secondary xsl:result-document whose href resolves to a DIFFERENT URI
@@ -614,7 +615,7 @@ func TestResultDocument(t *testing.T) {
 
 		_, err = xslt3.CompileStylesheet(t.Context(), doc)
 		require.Error(t, err, "an invalid constant allow-duplicate-names must fail compilation")
-		require.Contains(t, err.Error(), "SEPM0016")
+		require.Contains(t, err.Error(), lexicon.ErrSEPM0016)
 	})
 
 	// An xsl:result-document whose allow-duplicate-names AVT resolves to an invalid
@@ -636,7 +637,7 @@ func TestResultDocument(t *testing.T) {
 		_, err := ss.Transform(parseTransformSource(t)).Do(t.Context())
 		require.Error(t, err,
 			"an invalid allow-duplicate-names AVT must raise a dynamic error, not fall back to the inherited value")
-		require.Contains(t, err.Error(), "SEPM0016")
+		require.Contains(t, err.Error(), lexicon.ErrSEPM0016)
 	})
 
 	// A secondary (href) JSON result document must reject duplicate keys
@@ -661,7 +662,7 @@ func TestResultDocument(t *testing.T) {
 			ResultDocumentHandler(collector).
 			Do(t.Context())
 		require.Error(t, err, "a secondary JSON result document with duplicate keys must fail")
-		require.ErrorContains(t, err, "SERE0022")
+		require.ErrorContains(t, err, lexicon.ErrSERE0022)
 	})
 
 	// With allow-duplicate-names="yes" the same secondary JSON result document is
@@ -740,7 +741,7 @@ func TestResultDocument(t *testing.T) {
 				_, err := ss.Transform(parseTransformSource(t)).Do(t.Context())
 				require.Error(t, err,
 					"an invalid AVT value for a boolean serialization parameter must fail")
-				require.ErrorContains(t, err, "SEPM0016")
+				require.ErrorContains(t, err, lexicon.ErrSEPM0016)
 			})
 		}
 	})
@@ -762,7 +763,7 @@ func TestResultDocument(t *testing.T) {
 		_, err := ss.Transform(parseTransformSource(t)).Do(t.Context())
 		require.Error(t, err,
 			"a build-tree AVT that raises a dynamic error must not be silently ignored")
-		require.ErrorContains(t, err, "FOAR0001")
+		require.ErrorContains(t, err, lexicon.ErrFOAR0001)
 	})
 
 	// A primary xsl:result-document whose ONLY serialization attribute is

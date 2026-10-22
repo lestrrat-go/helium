@@ -11,6 +11,7 @@ import (
 
 	"github.com/lestrrat-go/helium"
 	"github.com/lestrrat-go/helium/internal/heliumtest"
+	"github.com/lestrrat-go/helium/internal/lexicon"
 	"github.com/lestrrat-go/helium/xpath3"
 	"github.com/lestrrat-go/helium/xslt3"
 	"github.com/stretchr/testify/require"
@@ -381,7 +382,7 @@ func TestFnTransform(t *testing.T) {
 		runtimeResolver := httpResolverFunc(func(uri string) (io.ReadCloser, error) {
 			calledWith = append(calledWith, uri)
 			if uri != dataURI {
-				return nil, &xpath3.XPathError{Code: "FOUT1170", Message: "not found: " + uri}
+				return nil, &xpath3.XPathError{Code: lexicon.ErrFOUT1170, Message: "not found: " + uri}
 			}
 			return io.NopCloser(strings.NewReader("hello-from-resolver")), nil
 		})
@@ -437,7 +438,7 @@ func TestFnTransform(t *testing.T) {
 
 		runtimeResolver := httpResolverFunc(func(uri string) (io.ReadCloser, error) {
 			if uri != dataURI {
-				return nil, &xpath3.XPathError{Code: "FOUT1170", Message: "not found: " + uri}
+				return nil, &xpath3.XPathError{Code: lexicon.ErrFOUT1170, Message: "not found: " + uri}
 			}
 			return io.NopCloser(strings.NewReader(big)), nil
 		})
@@ -820,7 +821,7 @@ func TestFnTransform(t *testing.T) {
 		expr := `fn:transform(map{"stylesheet-text":$xsl,"source-node":parse-xml('<doc/>'),"base-output-uri":"http://example.com/base/main.xml"})`
 		err := transformErr(t, expr, xslXMLVars(xsl, ""))
 		require.Error(t, err)
-		require.Contains(t, err.Error(), "XTDE1490")
+		require.Contains(t, err.Error(), lexicon.ErrXTDE1490)
 	})
 
 	// TestFnTransformSerializedTextPreservesTrailingNewline guards that method="text"
@@ -864,7 +865,7 @@ func TestFnTransform(t *testing.T) {
 		badExpr := `transform(map{"stylesheet-text":$xsl,"initial-template":QName("","main"),"global-context-item":"hello"})?output`
 		_, err := evalTransform(t, badExpr, nil, vars, transformFns())
 		require.Error(t, err)
-		require.Contains(t, err.Error(), "XTTE0590")
+		require.Contains(t, err.Error(), lexicon.ErrXTTE0590)
 	})
 
 	// TestFnTransformGlobalContextItemCardinality covers F&O 3.1 §14.8: the
@@ -884,7 +885,7 @@ func TestFnTransform(t *testing.T) {
 				expr := `transform(map{"stylesheet-text":$xsl,"initial-template":QName("","main"),"global-context-item":` + tc.gci + `})?output`
 				err := transformErr(t, expr, vars)
 				require.Error(t, err)
-				require.Contains(t, err.Error(), "XPTY0004")
+				require.Contains(t, err.Error(), lexicon.ErrXPTY0004)
 			})
 		}
 	})
@@ -905,14 +906,14 @@ func TestFnTransform(t *testing.T) {
 			expr := `transform(map{"stylesheet-text":$xsl,"initial-template":QName("","main"),"global-context-item":42})?output`
 			err := transformErr(t, expr, xslXMLVars(absentXSL, ""))
 			require.Error(t, err)
-			require.Contains(t, err.Error(), "XPDY0002")
+			require.Contains(t, err.Error(), lexicon.ErrXPDY0002)
 		})
 
 		t.Run("absent-with-source-node-global-dot-is-absent", func(t *testing.T) {
 			expr := `transform(map{"stylesheet-text":$xsl,"initial-template":QName("","main"),"source-node":parse-xml("<a/>")})?output`
 			err := transformErr(t, expr, xslXMLVars(absentXSL, ""))
 			require.Error(t, err)
-			require.Contains(t, err.Error(), "XPDY0002")
+			require.Contains(t, err.Error(), lexicon.ErrXPDY0002)
 		})
 
 		t.Run("absent-with-source-node-match-template-applies", func(t *testing.T) {
@@ -931,14 +932,14 @@ func TestFnTransform(t *testing.T) {
 			expr := `transform(map{"stylesheet-text":$xsl,"source-node":parse-xml("<a/>")})?output`
 			err := transformErr(t, expr, xslXMLVars(matchXSL, ""))
 			require.Error(t, err)
-			require.Contains(t, err.Error(), "XPDY0002")
+			require.Contains(t, err.Error(), lexicon.ErrXPDY0002)
 		})
 
 		t.Run("required-no-source-no-gci-raises-XTDE3086", func(t *testing.T) {
 			expr := `transform(map{"stylesheet-text":$xsl,"initial-template":QName("","main")})?output`
 			err := transformErr(t, expr, xslXMLVars(requiredXSL, ""))
 			require.Error(t, err)
-			require.Contains(t, err.Error(), "XTDE3086")
+			require.Contains(t, err.Error(), lexicon.ErrXTDE3086)
 		})
 
 		t.Run("required-with-source-node-ok", func(t *testing.T) {
@@ -1232,7 +1233,7 @@ func TestFnTransform(t *testing.T) {
 				transformFns(),
 			)
 			require.Error(t, err)
-			require.Contains(t, err.Error(), "XTSE0165")
+			require.Contains(t, err.Error(), lexicon.ErrXTSE0165)
 		})
 
 		// stylesheet-base-uri (absolute) supplies the base for the inline text so the
@@ -1375,7 +1376,7 @@ func TestFnTransform(t *testing.T) {
 				transformFns(),
 			)
 			require.Error(t, err)
-			require.Contains(t, err.Error(), "FOXT0003")
+			require.Contains(t, err.Error(), lexicon.ErrFOXT0003)
 		})
 
 		t.Run("DocumentDelivery", func(t *testing.T) {
@@ -1401,7 +1402,7 @@ func (r *memResolver) Resolve(uri string) (io.ReadCloser, error) {
 	r.calledWith = append(r.calledWith, uri)
 	content, ok := r.files[uri]
 	if !ok {
-		return nil, &xpath3.XPathError{Code: "FOXT0003", Message: "not found: " + uri}
+		return nil, &xpath3.XPathError{Code: lexicon.ErrFOXT0003, Message: "not found: " + uri}
 	}
 	return io.NopCloser(strings.NewReader(content)), nil
 }

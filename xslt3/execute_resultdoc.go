@@ -99,7 +99,7 @@ func validateDocumentStructure(doc *helium.Document) error {
 			// that is not whitespace-only) fails validation.
 			text := strings.TrimSpace(string(child.Content()))
 			if text != "" {
-				return dynamicError(errCodeXTTE1550,
+				return dynamicError(lexicon.ErrXTTE1550,
 					"validated document has text nodes at the top level")
 			}
 		case helium.CommentNode, helium.ProcessingInstructionNode, helium.DTDNode:
@@ -107,7 +107,7 @@ func validateDocumentStructure(doc *helium.Document) error {
 		}
 	}
 	if elemCount != 1 {
-		return dynamicError(errCodeXTTE1550,
+		return dynamicError(lexicon.ErrXTTE1550,
 			"validated document must have exactly one root element, found %d", elemCount)
 	}
 	return nil
@@ -164,8 +164,8 @@ func (ec *execContext) execDocument(ctx context.Context, inst *documentInst) err
 			root := findDocumentElement(tmpDoc)
 			if root != nil {
 				if err := ec.validateAndNormalizeElementContent(ctx, root, inst.TypeName); err != nil {
-					if xsltErr, ok := errors.AsType[*XSLTError](err); ok && xsltErr.Code == errCodeXTTE1510 {
-						return dynamicError(errCodeXTTE1540,
+					if xsltErr, ok := errors.AsType[*XSLTError](err); ok && xsltErr.Code == lexicon.ErrXTTE1510 {
+						return dynamicError(lexicon.ErrXTTE1540,
 							"document content does not match declared type %s: %v", inst.TypeName, xsltErr.Message)
 					}
 					return err
@@ -187,7 +187,7 @@ func (ec *execContext) execDocument(ctx context.Context, inst *documentInst) err
 		if ec.schemaRegistry != nil {
 			vr, valErr := ec.schemaRegistry.ValidateDoc(ctx, tmpDoc)
 			if valErr != nil && v == validationStrict {
-				return dynamicError(errCodeXTTE1510, "validation of document node failed: %v", valErr)
+				return dynamicError(lexicon.ErrXTTE1510, "validation of document node failed: %v", valErr)
 			}
 			if valErr == nil && v == validationStrict {
 				// XTTE1510: strict validation requires a matching schema.
@@ -198,7 +198,7 @@ func (ec *execContext) execDocument(ctx context.Context, inst *documentInst) err
 					if root != nil {
 						rootNS = root.URI()
 					}
-					return dynamicError(errCodeXTTE1510,
+					return dynamicError(lexicon.ErrXTTE1510,
 						"no matching schema declaration for document element in namespace %q", rootNS)
 				}
 				// XTTE1555: check xs:ID uniqueness and xs:IDREF resolution.
@@ -303,7 +303,7 @@ func validateMapDuplicateKeys(m xpath3.MapItem) error {
 		}
 		ks, _ := xpath3.AtomicToString(k)
 		if _, dup := seenKeys[ks]; dup {
-			dupErr = dynamicError(errCodeSERE0022, "duplicate key %q in JSON output", ks)
+			dupErr = dynamicError(lexicon.ErrSERE0022, "duplicate key %q in JSON output", ks)
 			return dupErr
 		}
 		seenKeys[ks] = struct{}{}
@@ -340,7 +340,7 @@ func (ec *execContext) resolveResultDocFormat(ctx context.Context, inst *resultD
 			// XTDE0290: prefix must have a namespace binding
 			if prefix, _, ok := strings.Cut(v, ":"); ok {
 				if _, ok := inst.NSBindings[prefix]; !ok {
-					return "", dynamicError(errCodeXTDE0290,
+					return "", dynamicError(lexicon.ErrXTDE0290,
 						"prefix %q in result-document format has no namespace binding", prefix)
 				}
 			}
@@ -440,7 +440,7 @@ func (ec *execContext) commitPrimaryOutputState(inst *resultDocumentInst, effect
 func (ec *execContext) execResultDocument(ctx context.Context, inst *resultDocumentInst) error {
 	// XTDE1480: xsl:result-document is not allowed in a temporary output state.
 	if ec.temporaryOutputDepth > 0 {
-		return dynamicError(errCodeXTDE1480, "xsl:result-document is not allowed while in temporary output state")
+		return dynamicError(lexicon.ErrXTDE1480, "xsl:result-document is not allowed while in temporary output state")
 	}
 
 	// Evaluate the href avt to determine the output URI.
@@ -465,11 +465,11 @@ func (ec *execContext) execResultDocument(ctx context.Context, inst *resultDocum
 		dupKey = canonicalResultURIKey(href, ec.currentOutputURI)
 	}
 	if _, used := ec.usedResultURIs[dupKey]; used {
-		return dynamicError(errCodeXTDE1490, "two result documents written to same URI: %q", dupKey)
+		return dynamicError(lexicon.ErrXTDE1490, "two result documents written to same URI: %q", dupKey)
 	}
 
 	if isPrimary && ec.primaryClaimedImplicitly {
-		return dynamicError(errCodeXTRE1495, "primary output URI already has implicit content")
+		return dynamicError(lexicon.ErrXTRE1495, "primary output URI already has implicit content")
 	}
 
 	// Reserve the canonical URI so a concurrent/nested result-document targeting
@@ -497,7 +497,7 @@ func (ec *execContext) execResultDocument(ctx context.Context, inst *resultDocum
 	// XTDE1460: the format attribute must reference a declared xsl:output.
 	if effectiveFormat != "" {
 		if _, ok := ec.effectiveOutputs()[effectiveFormat]; !ok {
-			return dynamicError(errCodeXTDE1460,
+			return dynamicError(lexicon.ErrXTDE1460,
 				"xsl:result-document format %q does not match any declared xsl:output", effectiveFormat)
 		}
 	}
@@ -611,8 +611,8 @@ func (ec *execContext) execResultDocument(ctx context.Context, inst *resultDocum
 			root := findDocumentElement(tmpDoc)
 			if root != nil && ec.schemaRegistry != nil {
 				if err := ec.validateAndNormalizeElementContent(ctx, root, inst.TypeName); err != nil {
-					if xsltErr, ok := errors.AsType[*XSLTError](err); ok && xsltErr.Code == errCodeXTTE1510 {
-						return dynamicError(errCodeXTTE1540,
+					if xsltErr, ok := errors.AsType[*XSLTError](err); ok && xsltErr.Code == lexicon.ErrXTTE1510 {
+						return dynamicError(lexicon.ErrXTTE1540,
 							"result document content does not match declared type %s: %v", inst.TypeName, xsltErr.Message)
 					}
 					return err
@@ -651,7 +651,7 @@ func (ec *execContext) execResultDocument(ctx context.Context, inst *resultDocum
 			if ec.schemaRegistry != nil {
 				vr, valErr := ec.schemaRegistry.ValidateDoc(ctx, tmpDoc)
 				if valErr != nil && v == validationStrict {
-					return dynamicError(errCodeXTTE1540, "validation of primary result document failed: %v", valErr)
+					return dynamicError(lexicon.ErrXTTE1540, "validation of primary result document failed: %v", valErr)
 				}
 				if valErr == nil && v == validationStrict {
 					// XTTE1555: check xs:ID uniqueness and xs:IDREF resolution.
@@ -912,8 +912,8 @@ func (ec *execContext) execResultDocument(ctx context.Context, inst *resultDocum
 		root := findDocumentElement(tmpDoc)
 		if root != nil && ec.schemaRegistry != nil {
 			if err := ec.validateAndNormalizeElementContent(ctx, root, inst.TypeName); err != nil {
-				if xsltErr, ok := errors.AsType[*XSLTError](err); ok && xsltErr.Code == errCodeXTTE1510 {
-					return dynamicError(errCodeXTTE1540,
+				if xsltErr, ok := errors.AsType[*XSLTError](err); ok && xsltErr.Code == lexicon.ErrXTTE1510 {
+					return dynamicError(lexicon.ErrXTTE1540,
 						"result document content does not match declared type %s: %v", inst.TypeName, xsltErr.Message)
 				}
 				return err
@@ -935,7 +935,7 @@ func (ec *execContext) execResultDocument(ctx context.Context, inst *resultDocum
 		if ec.schemaRegistry != nil {
 			vr, valErr := ec.schemaRegistry.ValidateDoc(ctx, tmpDoc)
 			if valErr != nil && v == validationStrict {
-				return dynamicError(errCodeXTTE1510, "validation of result document failed: %v", valErr)
+				return dynamicError(lexicon.ErrXTTE1510, "validation of result document failed: %v", valErr)
 			}
 			if valErr == nil && v == validationStrict {
 				// Check that the root element has a matching schema declaration.
@@ -945,7 +945,7 @@ func (ec *execContext) execResultDocument(ctx context.Context, inst *resultDocum
 						rootLocal := root.LocalName()
 						rootNS := root.URI()
 						if _, found := ec.schemaRegistry.LookupElement(rootLocal, rootNS); !found {
-							return dynamicError(errCodeXTTE1510,
+							return dynamicError(lexicon.ErrXTTE1510,
 								"no matching schema declaration for element {%s}%s in result document (validation=strict)", rootNS, rootLocal)
 						}
 					}
@@ -1012,7 +1012,7 @@ func (ec *execContext) evalBoolSerializationAVT(ctx context.Context, a *avt, par
 	}
 	b, ok := parseXSDBool(strings.TrimSpace(v))
 	if !ok {
-		return false, dynamicError(errCodeSEPM0016,
+		return false, dynamicError(lexicon.ErrSEPM0016,
 			"%q is not a valid value for xsl:result-document/@%s", v, paramName)
 	}
 	return b, nil

@@ -18,39 +18,39 @@ func checkStreamableExpr(ss *Stylesheet, expr *xpath3.Expression) error {
 	// are always available. However, preceding/preceding-sibling axes require
 	// backward access to already-consumed nodes, which is non-streamable.
 	if xpathstream.ExprUsesPrecedingAxis(expr) {
-		return staticError(errCodeXTSE3430,
+		return staticError(lexicon.ErrXTSE3430,
 			"expression %q uses preceding/preceding-sibling axis, which is not streamable", expr.String())
 	}
 
 	// 1. last() outside grounding context (non-motionless in streaming)
 	if exprUsesLastOutsideGrounding(expr) {
-		return staticError(errCodeXTSE3430,
+		return staticError(lexicon.ErrXTSE3430,
 			"expression %q uses last(), which is not streamable", expr.String())
 	}
 
 	// 3. path() function — not streamable (outside grounding context)
 	if exprUsesFunctionOutsideGrounding(expr, "path") {
-		return staticError(errCodeXTSE3430,
+		return staticError(lexicon.ErrXTSE3430,
 			"expression %q uses path(), which is not streamable", expr.String())
 	}
 
 	// 4. Non-motionless predicates on streaming steps (not on grounded data)
 	if exprHasNonMotionlessStreamingPredicate(ss, expr) {
-		return staticError(errCodeXTSE3430,
+		return staticError(lexicon.ErrXTSE3430,
 			"expression %q has a non-motionless predicate, which is not streamable", expr.String())
 	}
 
 	// 5. Multiple downward selections (consuming the stream twice)
 	// Only count selections outside grounding functions (snapshot/copy-of).
 	if countStreamingDownwardSelections(ss, expr.AST()) > 1 {
-		return staticError(errCodeXTSE3430,
+		return staticError(lexicon.ErrXTSE3430,
 			"expression %q has multiple downward selections, which is not streamable", expr.String())
 	}
 
 	// 6. Grounding functions (reverse, innermost) with crawling operands are not
 	// streamable because the crawling expression itself requires multi-level descent.
 	if exprHasCrawlingGroundingArg(expr) {
-		return staticError(errCodeXTSE3430,
+		return staticError(lexicon.ErrXTSE3430,
 			"expression %q uses a grounding function with a crawling operand, which is not streamable", expr.String())
 	}
 
@@ -58,14 +58,14 @@ func checkStreamableExpr(ss *Stylesheet, expr *xpath3.Expression) error {
 	// their sequence argument to be grounded — a consuming (downward) expression
 	// is not streamable as the first argument.
 	if exprHasHigherOrderWithConsumingArg(expr) {
-		return staticError(errCodeXTSE3430,
+		return staticError(lexicon.ErrXTSE3430,
 			"expression %q passes a consuming expression to a higher-order function, which is not streamable", expr.String())
 	}
 
 	// 8. accumulator-after() on a parent/ancestor axis is not streamable because
 	// the ancestor's post-descent value is not yet available during streaming.
 	if exprUsesAccumulatorAfterOnAncestor(expr) {
-		return staticError(errCodeXTSE3430,
+		return staticError(lexicon.ErrXTSE3430,
 			"expression %q uses accumulator-after on an ancestor, which is not streamable", expr.String())
 	}
 
@@ -73,7 +73,7 @@ func checkStreamableExpr(ss *Stylesheet, expr *xpath3.Expression) error {
 	// are not streamable. The argument must be in striding posture (., child, etc.),
 	// not climbing posture (.., parent::, ancestor::).
 	if exprHasShallowDescentCallWithClimbingArg(ss, expr) {
-		return staticError(errCodeXTSE3430,
+		return staticError(lexicon.ErrXTSE3430,
 			"expression %q calls a shallow-descent function with a climbing argument, which is not streamable", expr.String())
 	}
 
@@ -82,7 +82,7 @@ func checkStreamableExpr(ss *Stylesheet, expr *xpath3.Expression) error {
 	// access the streaming source (crawling/striding) and others are grounded
 	// (variable refs, literals) has mixed posture and is not streamable.
 	if exprHasMixedPostureSequenceInPath(expr) {
-		return staticError(errCodeXTSE3430,
+		return staticError(lexicon.ErrXTSE3430,
 			"expression %q has a mixed-posture sequence expression in a path, which is not streamable", expr.String())
 	}
 
@@ -91,7 +91,7 @@ func checkStreamableExpr(ss *Stylesheet, expr *xpath3.Expression) error {
 	// (section 19.8.8.2). Stepping from a crawling expression is not
 	// streamable.
 	if exprHasUnionInPathStep(expr) {
-		return staticError(errCodeXTSE3430,
+		return staticError(lexicon.ErrXTSE3430,
 			"expression %q has a union used as the input of a path step, which is not streamable (union of streaming expressions is crawling)", expr.String())
 	}
 
@@ -99,7 +99,7 @@ func checkStreamableExpr(ss *Stylesheet, expr *xpath3.Expression) error {
 	// requires inspecting the document element (consuming), and subsequent
 	// path steps also consume, giving multiple consuming operations.
 	if exprHasConsumingTreatAsInPath(expr) {
-		return staticError(errCodeXTSE3430,
+		return staticError(lexicon.ErrXTSE3430,
 			"expression %q uses treat as document-node(element(...)) in a path, which is not streamable", expr.String())
 	}
 
@@ -108,7 +108,7 @@ func checkStreamableExpr(ss *Stylesheet, expr *xpath3.Expression) error {
 	// is not streamable because the downward step from an ancestor may access
 	// nodes that have not yet been streamed.
 	if exprHasUpThenDownNavigation(expr) {
-		return staticError(errCodeXTSE3430,
+		return staticError(lexicon.ErrXTSE3430,
 			"expression %q navigates upward then downward, which is not streamable", expr.String())
 	}
 

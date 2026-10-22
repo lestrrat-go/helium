@@ -15,6 +15,7 @@ import (
 	"testing"
 
 	"github.com/lestrrat-go/helium"
+	"github.com/lestrrat-go/helium/internal/lexicon"
 	"github.com/lestrrat-go/helium/xpath3"
 	"github.com/lestrrat-go/helium/xslt3"
 	"github.com/stretchr/testify/require"
@@ -195,7 +196,7 @@ func TestFnDoc(t *testing.T) {
 
 		resolver := httpResolverFunc(func(uri string) (io.ReadCloser, error) {
 			if uri != u {
-				return nil, &xpath3.XPathError{Code: "FOUT1170", Message: "not found: " + uri}
+				return nil, &xpath3.XPathError{Code: lexicon.ErrFOUT1170, Message: "not found: " + uri}
 			}
 			return io.NopCloser(strings.NewReader(body)), nil
 		})
@@ -999,7 +1000,7 @@ func TestDefaultDenyFS(t *testing.T) {
 
 		_, err := ss.Transform(source).Serialize(t.Context())
 		require.Error(t, err, "source-document must default-deny without a URIResolver")
-		require.Contains(t, err.Error(), "FODC0002")
+		require.Contains(t, err.Error(), lexicon.ErrFODC0002)
 	})
 
 	// TestSourceDocumentRoutesThroughResolver verifies that with a recording
@@ -1065,7 +1066,7 @@ func TestDefaultDenyFS(t *testing.T) {
 
 		_, err := ss.Transform(source).Serialize(t.Context())
 		require.Error(t, err, "xsl:merge must default-deny without a URIResolver")
-		require.Contains(t, err.Error(), "FODC0002")
+		require.Contains(t, err.Error(), lexicon.ErrFODC0002)
 	})
 
 	// TestMergeRoutesThroughResolver verifies that with a recording resolver

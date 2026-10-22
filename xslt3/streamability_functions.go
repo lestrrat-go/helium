@@ -34,7 +34,7 @@ func checkAbsorbingFunction(fn *xslFunction) error {
 	for _, inst := range fn.Body {
 		for _, expr := range getInstructionExprs(inst) {
 			if xpathstream.ExprUsesFunction(expr, "path") {
-				return staticError(errCodeXTSE3430,
+				return staticError(lexicon.ErrXTSE3430,
 					"absorbing function %q uses path(), which is not streamable", fn.Name.Name)
 			}
 		}
@@ -42,19 +42,19 @@ func checkAbsorbingFunction(fn *xslFunction) error {
 
 	// Check if the function returns a non-grounded result.
 	if !functionBodyIsGrounded(fn) {
-		return staticError(errCodeXTSE3430,
+		return staticError(lexicon.ErrXTSE3430,
 			"absorbing function %q returns a non-grounded result, which violates its declared streamability", fn.Name.Name)
 	}
 
 	// Check for multiple consuming references to the streaming parameter.
 	if functionHasMultipleConsumingRefs(fn) {
-		return staticError(errCodeXTSE3430,
+		return staticError(lexicon.ErrXTSE3430,
 			"absorbing function %q has multiple consuming references to a streaming parameter, which is not streamable", fn.Name.Name)
 	}
 
 	// Check for consuming references in loops
 	if functionHasConsumingRefInLoop(fn) {
-		return staticError(errCodeXTSE3430,
+		return staticError(lexicon.ErrXTSE3430,
 			"absorbing function %q has a consuming reference in a loop, which is not streamable", fn.Name.Name)
 	}
 
@@ -76,14 +76,14 @@ func checkInspectionFunction(fn *xslFunction) error {
 
 	// Inspection must not return the streaming parameter itself.
 	if functionReturnsStreamingParam(fn) {
-		return staticError(errCodeXTSE3430,
+		return staticError(lexicon.ErrXTSE3430,
 			"inspection function %q returns a streaming parameter, violating its declared streamability", fn.Name.Name)
 	}
 
 	for _, inst := range fn.Body {
 		for _, expr := range getInstructionExprs(inst) {
 			if exprConsumesParam(expr, fn.Params) {
-				return staticError(errCodeXTSE3430,
+				return staticError(lexicon.ErrXTSE3430,
 					"inspection function %q consumes a streaming parameter, violating its declared streamability", fn.Name.Name)
 			}
 		}
@@ -107,14 +107,14 @@ func checkFilterFunction(fn *xslFunction) error {
 
 	// Filter function must not navigate upward from param (return climbing nodes).
 	if functionUsesUpwardFromParam(fn) {
-		return staticError(errCodeXTSE3430,
+		return staticError(lexicon.ErrXTSE3430,
 			"filter function %q navigates upward from streaming parameter, violating its declared streamability", fn.Name.Name)
 	}
 
 	for _, inst := range fn.Body {
 		for _, expr := range getInstructionExprs(inst) {
 			if exprConsumesParam(expr, fn.Params) {
-				return staticError(errCodeXTSE3430,
+				return staticError(lexicon.ErrXTSE3430,
 					"filter function %q consumes a streaming parameter, violating its declared streamability", fn.Name.Name)
 			}
 		}
@@ -138,7 +138,7 @@ func checkShallowDescentFunction(fn *xslFunction) error {
 	// Check if descendant/descendant-or-self axes are used.
 	for _, inst := range fn.Body {
 		if slices.ContainsFunc(getInstructionExprs(inst), xpathstream.ExprUsesDescendantOrSelf) {
-			return staticError(errCodeXTSE3430,
+			return staticError(lexicon.ErrXTSE3430,
 				"shallow-descent function %q uses descendant axis, violating its declared streamability", fn.Name.Name)
 		}
 	}
@@ -148,12 +148,12 @@ func checkShallowDescentFunction(fn *xslFunction) error {
 	if firstParam.As != "" {
 		as := strings.TrimSpace(firstParam.As)
 		if as != "node()" && as != lexicon.NodeTestElement {
-			return staticError(errCodeXTSE3430,
+			return staticError(lexicon.ErrXTSE3430,
 				"shallow-descent function %q first parameter type %q is not a single node, violating its declared streamability",
 				fn.Name.Name, firstParam.As)
 		}
 	} else {
-		return staticError(errCodeXTSE3430,
+		return staticError(lexicon.ErrXTSE3430,
 			"shallow-descent function %q first parameter has no type constraint, violating its declared streamability",
 			fn.Name.Name)
 	}
@@ -166,7 +166,7 @@ func checkShallowDescentFunction(fn *xslFunction) error {
 	// Check that the parameter is not used in a simple mapping expression,
 	// which would cause multiple consumption. E.g., (1 to 5) ! $n
 	if functionHasParamInSimpleMap(fn) {
-		return staticError(errCodeXTSE3430,
+		return staticError(lexicon.ErrXTSE3430,
 			"shallow-descent function %q uses streaming parameter in simple mapping expression, violating its declared streamability",
 			fn.Name.Name)
 	}
@@ -597,14 +597,14 @@ func checkAscentFunction(fn *xslFunction) error {
 	// If the body just returns the param without upward navigation,
 	// it returns a raw streaming node, which is invalid.
 	if functionReturnsStreamingParam(fn) && !functionUsesUpwardFromParam(fn) {
-		return staticError(errCodeXTSE3430,
+		return staticError(lexicon.ErrXTSE3430,
 			"ascent function %q returns a streaming parameter without upward navigation, violating its declared streamability", fn.Name.Name)
 	}
 
 	for _, inst := range fn.Body {
 		for _, expr := range getInstructionExprs(inst) {
 			if exprConsumesParam(expr, fn.Params) {
-				return staticError(errCodeXTSE3430,
+				return staticError(lexicon.ErrXTSE3430,
 					"ascent function %q consumes a streaming parameter, violating its declared streamability", fn.Name.Name)
 			}
 		}
@@ -633,7 +633,7 @@ func checkStreamingParamIsSingleton(fn *xslFunction, category string) error {
 		base := strings.TrimRight(as, "*+")
 		// Only flag if it's a node type (not xs:string*, etc.)
 		if !strings.HasPrefix(base, "xs:") {
-			return staticError(errCodeXTSE3430,
+			return staticError(lexicon.ErrXTSE3430,
 				"%s function %q first parameter type %q accepts a sequence, violating its declared streamability",
 				category, fn.Name.Name, firstParam.As)
 		}
@@ -651,7 +651,7 @@ func checkAdditionalParamsNotStreaming(fn *xslFunction, category string) error {
 		if isAtomicTypeConstraint(as) {
 			continue
 		}
-		return staticError(errCodeXTSE3430,
+		return staticError(lexicon.ErrXTSE3430,
 			"%s function %q additional parameter %q could receive streaming nodes, violating its declared streamability",
 			category, fn.Name.Name, p.Name)
 	}

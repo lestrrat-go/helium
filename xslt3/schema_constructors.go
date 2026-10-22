@@ -48,7 +48,7 @@ func (ec *execContext) makeSchemaConstructor(td *xsd.TypeDef) func(context.Conte
 		if baseType == xpath3.TypeQName || baseType == xpath3.TypeNOTATION {
 			if err := td.Validate(ctx, lexical, ec.stylesheet.namespaces); err != nil {
 				return nil, &xpath3.XPathError{
-					Code:    "FORG0001",
+					Code:    lexicon.ErrFORG0001,
 					Message: fmt.Sprintf("cannot cast %q to %s", lexical, typeName),
 				}
 			}
@@ -63,7 +63,7 @@ func (ec *execContext) makeSchemaConstructor(td *xsd.TypeDef) func(context.Conte
 		}
 		if err := td.Validate(ctx, lexical, nil); err != nil {
 			return nil, &xpath3.XPathError{
-				Code:    "FORG0001",
+				Code:    lexicon.ErrFORG0001,
 				Message: fmt.Sprintf("cannot cast %q to %s", lexical, typeName),
 			}
 		}
@@ -119,7 +119,7 @@ func schemaConstructorQNameValue(av xpath3.AtomicValue, ec *execContext) (xpath3
 
 	if av.TypeName != xpath3.TypeString && av.TypeName != xpath3.TypeUntypedAtomic {
 		return xpath3.QNameValue{}, &xpath3.XPathError{
-			Code:    "XPTY0004",
+			Code:    lexicon.ErrXPTY0004,
 			Message: fmt.Sprintf("cannot cast %s to schema-derived QName/NOTATION type", av.TypeName),
 		}
 	}
@@ -130,7 +130,7 @@ func resolveQNameFromMap(s string, ns map[string]string) (xpath3.QNameValue, err
 	prefix, local, _, validNC := domutil.SplitLexicalQName(s)
 	if !validNC {
 		return xpath3.QNameValue{}, &xpath3.XPathError{
-			Code:    "FORG0001",
+			Code:    lexicon.ErrFORG0001,
 			Message: fmt.Sprintf("invalid QName: %q", strings.TrimSpace(s)),
 		}
 	}
@@ -141,7 +141,7 @@ func resolveQNameFromMap(s string, ns map[string]string) (xpath3.QNameValue, err
 		uri, ok = ns[prefix]
 		if !ok {
 			return xpath3.QNameValue{}, &xpath3.XPathError{
-				Code:    "FONS0004",
+				Code:    lexicon.ErrFONS0004,
 				Message: fmt.Sprintf("no namespace binding for prefix %q", prefix),
 			}
 		}
@@ -158,7 +158,7 @@ func schemaConstructorArg(seq xpath3.Sequence, typeName string) (xpath3.AtomicVa
 	}
 	if sequence.Len(seq) > 1 {
 		return xpath3.AtomicValue{}, false, &xpath3.XPathError{
-			Code:    "XPTY0004",
+			Code:    lexicon.ErrXPTY0004,
 			Message: fmt.Sprintf("%s constructor requires a singleton argument", typeName),
 		}
 	}
