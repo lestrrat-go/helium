@@ -10,6 +10,8 @@ import (
 	"time"
 	"unicode"
 	"unicode/utf8"
+
+	"github.com/lestrrat-go/helium/internal/lexicon"
 )
 
 func fnFormatDateTime(ctx context.Context, args []Sequence) (Sequence, error) {
@@ -60,7 +62,7 @@ func formatDateTimeCommon(ctx context.Context, args []Sequence, typeName string)
 			return nil, err
 		}
 		if lang == "" {
-			return nil, &XPathError{Code: errCodeFOFD1340, Message: "format-dateTime: language argument must not be empty"}
+			return nil, &XPathError{Code: lexicon.ErrFOFD1340, Message: "format-dateTime: language argument must not be empty"}
 		}
 	}
 	if len(args) > 3 && seqLen(args[3]) > 0 {
@@ -81,7 +83,7 @@ func formatDateTimeCommon(ctx context.Context, args []Sequence, typeName string)
 		if place != "" {
 			loc, err := time.LoadLocation(place)
 			if err != nil {
-				return nil, &XPathError{Code: errCodeFOFD1340, Message: fmt.Sprintf("format-dateTime: invalid place: %s", place)}
+				return nil, &XPathError{Code: lexicon.ErrFOFD1340, Message: fmt.Sprintf("format-dateTime: invalid place: %s", place)}
 			}
 			if t.Location() == noTZLocation {
 				t = time.Date(t.Year(), t.Month(), t.Day(), t.Hour(), t.Minute(), t.Second(), t.Nanosecond(), loc)
@@ -141,7 +143,7 @@ func formatDateTimePicture(t time.Time, picture, lang, calendar, typeName string
 				}
 			}
 			if end < 0 {
-				return "", &XPathError{Code: errCodeFOFD1340, Message: "unclosed '[' in picture string"}
+				return "", &XPathError{Code: lexicon.ErrFOFD1340, Message: "unclosed '[' in picture string"}
 			}
 			component := string(runes[i+1 : end])
 			formatted, err := formatComponent(t, component, effectiveLang, effectiveCalendar, typeName)
@@ -183,7 +185,7 @@ func formatComponent(t time.Time, spec, lang, calendar, typeName string) (string
 	spec = stripSpaces(spec)
 
 	if len(spec) == 0 {
-		return "", &XPathError{Code: errCodeFOFD1340, Message: "empty component specifier"}
+		return "", &XPathError{Code: lexicon.ErrFOFD1340, Message: "empty component specifier"}
 	}
 
 	// First character is the component letter
@@ -247,7 +249,7 @@ func formatComponent(t time.Time, spec, lang, calendar, typeName string) (string
 	case 'C':
 		return "ISO", nil
 	default:
-		return "", &XPathError{Code: errCodeFOFD1340, Message: fmt.Sprintf("unknown component specifier: %c", compChar)}
+		return "", &XPathError{Code: lexicon.ErrFOFD1340, Message: fmt.Sprintf("unknown component specifier: %c", compChar)}
 	}
 
 	return formatDateTimeValue(value, compChar, presentation, width, lang), nil
@@ -1056,26 +1058,26 @@ func validateCalendarName(calendar string) error {
 	if strings.HasPrefix(calendar, "Q{") {
 		end := strings.Index(calendar, "}")
 		if end < 0 || end == len(calendar)-1 {
-			return &XPathError{Code: errCodeFOFD1340, Message: fmt.Sprintf("format-dateTime: invalid calendar: %s", calendar)}
+			return &XPathError{Code: lexicon.ErrFOFD1340, Message: fmt.Sprintf("format-dateTime: invalid calendar: %s", calendar)}
 		}
 		uri := calendar[2:end]
 		local := calendar[end+1:]
 		if !isNCName(local) {
-			return &XPathError{Code: errCodeFOFD1340, Message: fmt.Sprintf("format-dateTime: invalid calendar: %s", calendar)}
+			return &XPathError{Code: lexicon.ErrFOFD1340, Message: fmt.Sprintf("format-dateTime: invalid calendar: %s", calendar)}
 		}
 		if uri == "" && !isKnownCalendarName(local) {
-			return &XPathError{Code: errCodeFOFD1340, Message: fmt.Sprintf("format-dateTime: invalid calendar: %s", calendar)}
+			return &XPathError{Code: lexicon.ErrFOFD1340, Message: fmt.Sprintf("format-dateTime: invalid calendar: %s", calendar)}
 		}
 		return nil
 	}
 	if strings.Contains(calendar, ":") {
 		parts := strings.Split(calendar, ":")
 		if len(parts) != 2 || !isNCName(parts[0]) || !isNCName(parts[1]) {
-			return &XPathError{Code: errCodeFOFD1340, Message: fmt.Sprintf("format-dateTime: invalid calendar: %s", calendar)}
+			return &XPathError{Code: lexicon.ErrFOFD1340, Message: fmt.Sprintf("format-dateTime: invalid calendar: %s", calendar)}
 		}
 		return nil
 	}
-	return &XPathError{Code: errCodeFOFD1340, Message: fmt.Sprintf("format-dateTime: invalid calendar: %s", calendar)}
+	return &XPathError{Code: lexicon.ErrFOFD1340, Message: fmt.Sprintf("format-dateTime: invalid calendar: %s", calendar)}
 }
 
 func isNCName(s string) bool {
@@ -1139,14 +1141,14 @@ func validateComponentForType(comp byte, typeName string) error {
 		case 'H', 'h', 'P', 'm', 's', 'f', 'Z', 'z':
 			return nil
 		default:
-			return &XPathError{Code: errCodeFOFD1350, Message: fmt.Sprintf("component [%c] is not available for xs:time", comp)}
+			return &XPathError{Code: lexicon.ErrFOFD1350, Message: fmt.Sprintf("component [%c] is not available for xs:time", comp)}
 		}
 	case TypeDate:
 		switch comp {
 		case 'Y', 'M', 'D', 'd', 'F', 'W', 'w', 'E', 'C', 'Z', 'z':
 			return nil
 		default:
-			return &XPathError{Code: errCodeFOFD1350, Message: fmt.Sprintf("component [%c] is not available for xs:date", comp)}
+			return &XPathError{Code: lexicon.ErrFOFD1350, Message: fmt.Sprintf("component [%c] is not available for xs:date", comp)}
 		}
 	}
 	// xs:dateTime allows all components
@@ -1164,7 +1166,7 @@ func validateDateFormatToken(comp byte, p dtPresentation, w dtWidth) error {
 		if unicode.IsDigit(r) {
 			z := unicodeDigitZero(r)
 			if hasDigit && z != firstZero {
-				return &XPathError{Code: errCodeFOFD1340, Message: "mixed Unicode digit families in format token"}
+				return &XPathError{Code: lexicon.ErrFOFD1340, Message: "mixed Unicode digit families in format token"}
 			}
 			firstZero = z
 			hasDigit = true
@@ -1180,7 +1182,7 @@ func validateDateFormatToken(comp byte, p dtPresentation, w dtWidth) error {
 				seenDigit = true
 			} else if r == '#' {
 				if seenDigit {
-					return &XPathError{Code: errCodeFOFD1340, Message: "# after digit in format token"}
+					return &XPathError{Code: lexicon.ErrFOFD1340, Message: "# after digit in format token"}
 				}
 			}
 		}
@@ -1192,7 +1194,7 @@ func validateDateFormatToken(comp byte, p dtPresentation, w dtWidth) error {
 				seenHash = true
 			} else if unicode.IsDigit(r) {
 				if seenHash {
-					return &XPathError{Code: errCodeFOFD1340, Message: "# before digit in fractional seconds format"}
+					return &XPathError{Code: lexicon.ErrFOFD1340, Message: "# before digit in fractional seconds format"}
 				}
 			}
 		}
@@ -1200,16 +1202,16 @@ func validateDateFormatToken(comp byte, p dtPresentation, w dtWidth) error {
 
 	// Validate width modifier
 	if w.minWidth == 0 {
-		return &XPathError{Code: errCodeFOFD1340, Message: "minimum width cannot be zero"}
+		return &XPathError{Code: lexicon.ErrFOFD1340, Message: "minimum width cannot be zero"}
 	}
 	if w.maxWidth == 0 {
-		return &XPathError{Code: errCodeFOFD1340, Message: "maximum width cannot be zero"}
+		return &XPathError{Code: lexicon.ErrFOFD1340, Message: "maximum width cannot be zero"}
 	}
 	if w.minWidth > 0 && w.maxWidth > 0 && w.minWidth > w.maxWidth {
-		return &XPathError{Code: errCodeFOFD1340, Message: "minimum width exceeds maximum width"}
+		return &XPathError{Code: lexicon.ErrFOFD1340, Message: "minimum width exceeds maximum width"}
 	}
 	if w.minWidth > maxPictureMinWidth {
-		return &XPathError{Code: errCodeFOFD1340, Message: fmt.Sprintf("minimum width exceeds the implementation limit of %d", maxPictureMinWidth)}
+		return &XPathError{Code: lexicon.ErrFOFD1340, Message: fmt.Sprintf("minimum width exceeds the implementation limit of %d", maxPictureMinWidth)}
 	}
 
 	return nil

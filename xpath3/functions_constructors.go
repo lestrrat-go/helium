@@ -211,7 +211,7 @@ func makeXSStringRestriction(typeName string, validate *regexp.Regexp) func(cont
 		}
 		if validate != nil && !validate.MatchString(s) {
 			return nil, &XPathError{
-				Code:    errCodeFORG0001,
+				Code:    lexicon.ErrFORG0001,
 				Message: fmt.Sprintf("cannot cast %q to %s", s, typeName),
 			}
 		}
@@ -238,7 +238,7 @@ func makeXSTokenList(listType, itemType string, tokenRe *regexp.Regexp) func(con
 		s = strings.TrimSpace(s)
 		if s == "" {
 			return nil, &XPathError{
-				Code:    errCodeFORG0001,
+				Code:    lexicon.ErrFORG0001,
 				Message: fmt.Sprintf("cannot cast empty string to %s", listType),
 			}
 		}
@@ -247,7 +247,7 @@ func makeXSTokenList(listType, itemType string, tokenRe *regexp.Regexp) func(con
 		for i, tok := range tokens {
 			if !tokenRe.MatchString(tok) {
 				return nil, &XPathError{
-					Code:    errCodeFORG0001,
+					Code:    lexicon.ErrFORG0001,
 					Message: fmt.Sprintf("invalid token %q in %s", tok, listType),
 				}
 			}
@@ -430,7 +430,7 @@ func fnXSError(_ context.Context, args []Sequence) (Sequence, error) {
 		return validNilSequence, nil
 	}
 	return nil, &XPathError{
-		Code:    errCodeFORG0001,
+		Code:    lexicon.ErrFORG0001,
 		Message: "xs:error always fails",
 	}
 }

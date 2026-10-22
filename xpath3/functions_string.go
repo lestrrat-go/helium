@@ -55,7 +55,7 @@ func fnString(ctx context.Context, args []Sequence) (Sequence, error) {
 	if len(args) == 0 {
 		fc := getFnContext(ctx)
 		if fc == nil || (fc.contextItem == nil && fc.node == nil) {
-			return nil, &XPathError{Code: errCodeXPDY0002, Message: errMsgContextItemAbsent}
+			return nil, &XPathError{Code: lexicon.ErrXPDY0002, Message: errMsgContextItemAbsent}
 		}
 		s, ok := fc.contextStringValue()
 		if !ok {
@@ -73,7 +73,7 @@ func fnString(ctx context.Context, args []Sequence) (Sequence, error) {
 	// fn:string does not accept function items, maps, or arrays
 	switch item.(type) {
 	case FunctionItem, MapItem, ArrayItem:
-		return nil, &XPathError{Code: errCodeFOTY0014, Message: fmt.Sprintf("fn:string: cannot get string value of %T", item)}
+		return nil, &XPathError{Code: lexicon.ErrFOTY0014, Message: fmt.Sprintf("fn:string: cannot get string value of %T", item)}
 	}
 	// For node items, fn:string returns the dm:string-value (text content),
 	// NOT the typed/atomized value. This preserves lexical forms like "003"
@@ -398,12 +398,12 @@ func fnStringLength(ctx context.Context, args []Sequence) (Sequence, error) {
 	if len(args) == 0 {
 		fc := getFnContext(ctx)
 		if fc == nil {
-			return nil, &XPathError{Code: errCodeXPDY0002, Message: "string-length: context item is absent"}
+			return nil, &XPathError{Code: lexicon.ErrXPDY0002, Message: "string-length: context item is absent"}
 		}
 		var ok bool
 		s, ok = fc.contextStringValue()
 		if !ok {
-			return nil, &XPathError{Code: errCodeXPDY0002, Message: "string-length: context item is absent"}
+			return nil, &XPathError{Code: lexicon.ErrXPDY0002, Message: "string-length: context item is absent"}
 		}
 	} else {
 		var err error
@@ -420,7 +420,7 @@ func fnNormalizeSpace(ctx context.Context, args []Sequence) (Sequence, error) {
 	if len(args) == 0 {
 		fc := getFnContext(ctx)
 		if fc == nil || (fc.contextItem == nil && fc.node == nil) {
-			return nil, &XPathError{Code: errCodeXPDY0002, Message: errMsgContextItemAbsent}
+			return nil, &XPathError{Code: lexicon.ErrXPDY0002, Message: errMsgContextItemAbsent}
 		}
 		sv, ok := fc.contextStringValue()
 		if !ok {
@@ -485,7 +485,7 @@ func fnNormalizeUnicode(ctx context.Context, args []Sequence) (Sequence, error) 
 		}
 		return SingleString(result), nil
 	default:
-		return nil, &XPathError{Code: errCodeFOCH0003, Message: fmt.Sprintf("unsupported normalization form: %s", formName)}
+		return nil, &XPathError{Code: lexicon.ErrFOCH0003, Message: fmt.Sprintf("unsupported normalization form: %s", formName)}
 	}
 
 	return SingleString(nf.String(s)), nil
@@ -698,7 +698,7 @@ func fnMatches(ctx context.Context, args []Sequence) (Sequence, error) {
 	}
 	ok, err := re.MatchString(s)
 	if err != nil {
-		return nil, &XPathError{Code: errCodeFORX0002, Message: fmt.Sprintf("regex match failed: %v", err)}
+		return nil, &XPathError{Code: lexicon.ErrFORX0002, Message: fmt.Sprintf("regex match failed: %v", err)}
 	}
 	return SingleBoolean(ok), nil
 }
@@ -776,10 +776,10 @@ func fnReplace(ctx context.Context, args []Sequence) (Sequence, error) {
 	// XPath spec: error if pattern matches empty string
 	matchesEmpty, err := re.MatchString("")
 	if err != nil {
-		return nil, &XPathError{Code: errCodeFORX0002, Message: fmt.Sprintf("regex match failed: %v", err)}
+		return nil, &XPathError{Code: lexicon.ErrFORX0002, Message: fmt.Sprintf("regex match failed: %v", err)}
 	}
 	if matchesEmpty {
-		return nil, &XPathError{Code: errCodeFORX0003, Message: "replacement pattern matches zero-length string"}
+		return nil, &XPathError{Code: lexicon.ErrFORX0003, Message: "replacement pattern matches zero-length string"}
 	}
 
 	var goRepl string
@@ -796,7 +796,7 @@ func fnReplace(ctx context.Context, args []Sequence) (Sequence, error) {
 
 	replaced, err := re.ReplaceAllString(s, goRepl)
 	if err != nil {
-		return nil, &XPathError{Code: errCodeFORX0002, Message: fmt.Sprintf("regex replace failed: %v", err)}
+		return nil, &XPathError{Code: lexicon.ErrFORX0002, Message: fmt.Sprintf("regex replace failed: %v", err)}
 	}
 	return SingleString(replaced), nil
 }
@@ -813,7 +813,7 @@ func translateXPathReplacement(repl string, numGroups int) (string, error) {
 		switch ch {
 		case '\\':
 			if i+1 >= len(repl) {
-				return "", &XPathError{Code: errCodeFORX0004, Message: "invalid replacement string: trailing backslash"}
+				return "", &XPathError{Code: lexicon.ErrFORX0004, Message: "invalid replacement string: trailing backslash"}
 			}
 			next := repl[i+1]
 			switch next {
@@ -824,11 +824,11 @@ func translateXPathReplacement(repl string, numGroups int) (string, error) {
 				b.WriteString("$$") // Go's literal $
 				i++
 			default:
-				return "", &XPathError{Code: errCodeFORX0004, Message: fmt.Sprintf("invalid replacement string: \\%c", next)}
+				return "", &XPathError{Code: lexicon.ErrFORX0004, Message: fmt.Sprintf("invalid replacement string: \\%c", next)}
 			}
 		case '$':
 			if i+1 >= len(repl) || repl[i+1] < '0' || repl[i+1] > '9' {
-				return "", &XPathError{Code: errCodeFORX0004, Message: "invalid replacement string: $ not followed by digit"}
+				return "", &XPathError{Code: lexicon.ErrFORX0004, Message: "invalid replacement string: $ not followed by digit"}
 			}
 			// Collect digits after $, but only consume as many as form a
 			// valid group number (≤ numGroups). Remaining digits are literal.
@@ -921,15 +921,15 @@ func fnTokenize(ctx context.Context, args []Sequence) (Sequence, error) {
 	// XPath spec: error if pattern matches zero-length string
 	matchesEmpty, err := re.MatchString("")
 	if err != nil {
-		return nil, &XPathError{Code: errCodeFORX0002, Message: fmt.Sprintf("regex match failed: %v", err)}
+		return nil, &XPathError{Code: lexicon.ErrFORX0002, Message: fmt.Sprintf("regex match failed: %v", err)}
 	}
 	if matchesEmpty {
-		return nil, &XPathError{Code: errCodeFORX0003, Message: "tokenize pattern matches zero-length string"}
+		return nil, &XPathError{Code: lexicon.ErrFORX0003, Message: "tokenize pattern matches zero-length string"}
 	}
 
 	parts, err := re.Split(s, -1)
 	if err != nil {
-		return nil, &XPathError{Code: errCodeFORX0002, Message: fmt.Sprintf("regex split failed: %v", err)}
+		return nil, &XPathError{Code: lexicon.ErrFORX0002, Message: fmt.Sprintf("regex split failed: %v", err)}
 	}
 	result := make(ItemSlice, len(parts))
 	for i, p := range parts {
@@ -999,22 +999,22 @@ func fnAnalyzeString(ctx context.Context, args []Sequence) (Sequence, error) {
 	}
 	matchesEmpty, err := re.MatchString("")
 	if err != nil {
-		return nil, &XPathError{Code: errCodeFORX0002, Message: fmt.Sprintf("regex match failed: %v", err)}
+		return nil, &XPathError{Code: lexicon.ErrFORX0002, Message: fmt.Sprintf("regex match failed: %v", err)}
 	}
 	if matchesEmpty {
-		return nil, &XPathError{Code: errCodeFORX0003, Message: "analyze-string pattern matches zero-length string"}
+		return nil, &XPathError{Code: lexicon.ErrFORX0003, Message: "analyze-string pattern matches zero-length string"}
 	}
 
 	doc := helium.NewDefaultDocument()
 	root, err := createAnalyzeStringElement(doc, "analyze-string-result")
 	if err != nil {
-		return nil, &XPathError{Code: errCodeFOER0000, Message: fmt.Sprintf("analyze-string: failed to build result: %v", err)}
+		return nil, &XPathError{Code: lexicon.ErrFOER0000, Message: fmt.Sprintf("analyze-string: failed to build result: %v", err)}
 	}
 	if err := root.DeclareNamespace("fn", NSFn); err != nil {
-		return nil, &XPathError{Code: errCodeFOER0000, Message: fmt.Sprintf("analyze-string: failed to build result: %v", err)}
+		return nil, &XPathError{Code: lexicon.ErrFOER0000, Message: fmt.Sprintf("analyze-string: failed to build result: %v", err)}
 	}
 	if err := doc.SetDocumentElement(root); err != nil {
-		return nil, &XPathError{Code: errCodeFOER0000, Message: fmt.Sprintf("analyze-string: failed to build result: %v", err)}
+		return nil, &XPathError{Code: lexicon.ErrFOER0000, Message: fmt.Sprintf("analyze-string: failed to build result: %v", err)}
 	}
 
 	// The nesting of fn:group elements is a STATIC property of the pattern's
@@ -1043,7 +1043,7 @@ func fnAnalyzeString(ctx context.Context, args []Sequence) (Sequence, error) {
 	pos := 0
 	var buildErr error
 	buildFail := func(err error) bool {
-		buildErr = &XPathError{Code: errCodeFOER0000, Message: fmt.Sprintf("analyze-string: failed to build result: %v", err)}
+		buildErr = &XPathError{Code: lexicon.ErrFOER0000, Message: fmt.Sprintf("analyze-string: failed to build result: %v", err)}
 		return false
 	}
 	iterErr := re.eachStringSubmatchIndex(s, findLimit, func(m []int) bool {
@@ -1085,11 +1085,11 @@ func fnAnalyzeString(ctx context.Context, args []Sequence) (Sequence, error) {
 		if errors.Is(iterErr, ErrRegexMatchLimit) {
 			return nil, iterErr
 		}
-		return nil, &XPathError{Code: errCodeFORX0002, Message: fmt.Sprintf("regex match failed: %v", iterErr)}
+		return nil, &XPathError{Code: lexicon.ErrFORX0002, Message: fmt.Sprintf("regex match failed: %v", iterErr)}
 	}
 	if pos < len(s) {
 		if err := appendAnalyzeStringTextElement(doc, root, "non-match", s[pos:]); err != nil {
-			return nil, &XPathError{Code: errCodeFOER0000, Message: fmt.Sprintf("analyze-string: failed to build result: %v", err)}
+			return nil, &XPathError{Code: lexicon.ErrFOER0000, Message: fmt.Sprintf("analyze-string: failed to build result: %v", err)}
 		}
 	}
 
@@ -1916,7 +1916,7 @@ func compileXPathRegex(pattern, flags string) (*compiledXPathRegex, error) {
 			// Literal mode: quote the entire pattern, skip regex translation
 			literal = true
 		default:
-			return nil, &XPathError{Code: errCodeFORX0001, Message: fmt.Sprintf("invalid regex flag: %c", f)}
+			return nil, &XPathError{Code: lexicon.ErrFORX0001, Message: fmt.Sprintf("invalid regex flag: %c", f)}
 		}
 	}
 
@@ -1941,7 +1941,7 @@ func compileXPathRegex(pattern, flags string) (*compiledXPathRegex, error) {
 	if hasBackrefs || hasSubtraction || hasLargeQuantifier {
 		re, err := regexp2.Compile(pattern, re2Opts)
 		if err != nil {
-			return nil, &XPathError{Code: errCodeFORX0002, Message: fmt.Sprintf("invalid regular expression: %s", err)}
+			return nil, &XPathError{Code: lexicon.ErrFORX0002, Message: fmt.Sprintf("invalid regular expression: %s", err)}
 		}
 		if t := DefaultRegexMatchTimeout; t > 0 {
 			re.MatchTimeout = t
@@ -1958,7 +1958,7 @@ func compileXPathRegex(pattern, flags string) (*compiledXPathRegex, error) {
 	}
 	re, err := regexp.Compile(pattern)
 	if err != nil {
-		return nil, &XPathError{Code: errCodeFORX0002, Message: fmt.Sprintf("invalid regular expression: %s", err)}
+		return nil, &XPathError{Code: lexicon.ErrFORX0002, Message: fmt.Sprintf("invalid regular expression: %s", err)}
 	}
 	compiled := &compiledXPathRegex{
 		std:                 re,

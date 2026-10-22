@@ -326,7 +326,7 @@ func parseUCAParams(query string) (ucaParams, error) {
 	}
 
 	if p.fallbackNo && (invalid || unsupported || hasRegionalLang) {
-		return ucaParams{}, &XPathError{Code: errCodeFOCH0002, Message: "unsupported collation"}
+		return ucaParams{}, &XPathError{Code: lexicon.ErrFOCH0002, Message: "unsupported collation"}
 	}
 
 	return p, nil
@@ -650,7 +650,7 @@ func resolveCollation(uri, baseURI string) (*collationImpl, error) {
 		ucaCollationCache.Store(uri, cl)
 		return cl, nil
 	default:
-		return nil, &XPathError{Code: errCodeFOCH0002, Message: fmt.Sprintf("unsupported collation: %s", uri)}
+		return nil, &XPathError{Code: lexicon.ErrFOCH0002, Message: fmt.Sprintf("unsupported collation: %s", uri)}
 	}
 }
 

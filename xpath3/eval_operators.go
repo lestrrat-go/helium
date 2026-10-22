@@ -107,7 +107,7 @@ func concatToString(ctx context.Context, seq Sequence) (string, error) {
 	for item := range seqItems(seq) {
 		switch item.(type) {
 		case FunctionItem, MapItem:
-			return "", &XPathError{Code: errCodeFOTY0014, Message: "cannot get string value of function or map item"}
+			return "", &XPathError{Code: lexicon.ErrFOTY0014, Message: "cannot get string value of function or map item"}
 		}
 	}
 	return seqToStringErr(ctx, seq)
@@ -606,7 +606,7 @@ func pathStepFromNodes(evalFn exprEvaluator, ctx context.Context, ec *evalContex
 		// r is all nodes after earlier non-nodes, or it holds a non-node after
 		// earlier nodes or next to a node of its own.
 		if nok || hasNodes || sequenceHasNode(r) {
-			return nil, &XPathError{Code: errCodeXPTY0018, Message: errMsgPathMixedResult}
+			return nil, &XPathError{Code: lexicon.ErrXPTY0018, Message: errMsgPathMixedResult}
 		}
 		hasNonNodes = true
 		// Accumulate through the bounded helper so maxNodes / OpLimit /

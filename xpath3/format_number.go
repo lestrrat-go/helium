@@ -9,6 +9,7 @@ import (
 	"strings"
 
 	"github.com/lestrrat-go/helium/internal/icu"
+	"github.com/lestrrat-go/helium/internal/lexicon"
 )
 
 type DecimalFormat = icu.DecimalFormat
@@ -39,14 +40,14 @@ func resolveDecimalFormat(ctx context.Context, name string) (icu.DecimalFormat, 
 			return df, nil
 		}
 	}
-	return icu.DecimalFormat{}, &XPathError{Code: errCodeFODF1280, Message: fmt.Sprintf("unknown decimal format: %s", name)}
+	return icu.DecimalFormat{}, &XPathError{Code: lexicon.ErrFODF1280, Message: fmt.Sprintf("unknown decimal format: %s", name)}
 }
 
 func resolveDecimalFormatName(ctx context.Context, name string) (QualifiedName, error) {
 	if strings.HasPrefix(name, "Q{") {
 		end := strings.Index(name, "}")
 		if end < 0 || end == len(name)-1 {
-			return QualifiedName{}, &XPathError{Code: errCodeFODF1280, Message: fmt.Sprintf("unknown decimal format: %s", name)}
+			return QualifiedName{}, &XPathError{Code: lexicon.ErrFODF1280, Message: fmt.Sprintf("unknown decimal format: %s", name)}
 		}
 		return QualifiedName{URI: name[2:end], Name: name[end+1:]}, nil
 	}
@@ -62,7 +63,7 @@ func resolveDecimalFormatName(ctx context.Context, name string) (QualifiedName, 
 			}
 		}
 		if uri == "" {
-			return QualifiedName{}, &XPathError{Code: errCodeFODF1280, Message: fmt.Sprintf("unknown decimal format: %s", name)}
+			return QualifiedName{}, &XPathError{Code: lexicon.ErrFODF1280, Message: fmt.Sprintf("unknown decimal format: %s", name)}
 		}
 		return QualifiedName{URI: uri, Name: local}, nil
 	}
@@ -105,7 +106,7 @@ func formatNumber(a AtomicValue, picture string, df icu.DecimalFormat) (string, 
 
 	result, err := icu.FormatNumber(f, isNaN, isPosInf, isNegInf, negative, precise, picture, df)
 	if err != nil {
-		return "", &XPathError{Code: errCodeFODF1310, Message: fmt.Sprintf("invalid picture: %q", picture)}
+		return "", &XPathError{Code: lexicon.ErrFODF1310, Message: fmt.Sprintf("invalid picture: %q", picture)}
 	}
 	return result, nil
 }

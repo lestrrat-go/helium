@@ -170,7 +170,7 @@ func fnDateTime(_ context.Context, args []Sequence) (Sequence, error) {
 		_, doff := d.Zone()
 		_, toff := t.Zone()
 		if doff != toff {
-			return nil, &XPathError{Code: "FORG0008", Message: "date and time timezone values are not equal"}
+			return nil, &XPathError{Code: lexicon.ErrFORG0008, Message: "date and time timezone values are not equal"}
 		}
 		loc = d.Location()
 	case dateHasTZ:
@@ -641,12 +641,12 @@ func validateTimezoneOffset(d Duration) error {
 		abs = new(big.Rat).Neg(abs)
 	}
 	if abs.Cmp(big.NewRat(50400, 1)) > 0 { // 14 * 3600
-		return &XPathError{Code: "FODT0003", Message: "timezone offset out of range (-PT14H to PT14H)"}
+		return &XPathError{Code: lexicon.ErrFODT0003, Message: "timezone offset out of range (-PT14H to PT14H)"}
 	}
 	// Whole number of minutes: the exact seconds rational must be divisible by 60.
 	rem := new(big.Rat).Quo(abs, big.NewRat(60, 1))
 	if !rem.IsInt() {
-		return &XPathError{Code: "FODT0003", Message: "timezone offset must be a whole number of minutes"}
+		return &XPathError{Code: lexicon.ErrFODT0003, Message: "timezone offset must be a whole number of minutes"}
 	}
 	return nil
 }

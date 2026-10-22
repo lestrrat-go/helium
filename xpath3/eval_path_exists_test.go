@@ -10,6 +10,7 @@ import (
 
 	"github.com/lestrrat-go/helium"
 	"github.com/lestrrat-go/helium/internal/heliumtest"
+	"github.com/lestrrat-go/helium/internal/lexicon"
 	"github.com/lestrrat-go/helium/xpath3"
 	"github.com/stretchr/testify/require"
 )
@@ -280,9 +281,9 @@ func TestPathExistsSkippedErrors(t *testing.T) {
 	doc := earlyStopDoc(t, 10)
 	eval := xpath3.NewEvaluator(xpath3.DefaultEvaluatorOptions)
 	for _, tc := range []struct{ tmpl, path, code string }{
-		{tmplExists, "//b[if (@id = '0') then true() else error()]", "FOER0000"},
-		{tmplExists, "//b[xs:integer(@id) idiv (xs:integer(@id) - 1) = 0]", "FOAR0001"},
-		{"//r[{X}]", "b/c[if (../@id = '0') then true() else error()]", "FOER0000"},
+		{tmplExists, "//b[if (@id = '0') then true() else error()]", lexicon.ErrFOER0000},
+		{tmplExists, "//b[xs:integer(@id) idiv (xs:integer(@id) - 1) = 0]", lexicon.ErrFOAR0001},
+		{"//r[{X}]", "b/c[if (../@id = '0') then true() else error()]", lexicon.ErrFOER0000},
 	} {
 		fast, ref := existsForms(tc.tmpl, tc.path)
 		r, err := evalWith(t, eval, doc, fast)

@@ -9,6 +9,7 @@ import (
 	"sync/atomic"
 	"testing"
 
+	"github.com/lestrrat-go/helium/internal/lexicon"
 	"github.com/lestrrat-go/helium/xpath3"
 	"github.com/stretchr/testify/require"
 )
@@ -31,7 +32,7 @@ func TestMaxResourceBytesUnparsedText(t *testing.T) {
 		require.Error(t, err)
 		var xpErr *xpath3.XPathError
 		require.ErrorAs(t, err, &xpErr)
-		require.Equal(t, "FOUT1170", xpErr.Code)
+		require.Equal(t, lexicon.ErrFOUT1170, xpErr.Code)
 	})
 
 	t.Run("under limit succeeds", func(t *testing.T) {
@@ -64,7 +65,7 @@ func TestMaxResourceBytesJSONDoc(t *testing.T) {
 	require.Error(t, err)
 	var xpErr *xpath3.XPathError
 	require.ErrorAs(t, err, &xpErr)
-	require.Equal(t, "FODC0002", xpErr.Code)
+	require.Equal(t, lexicon.ErrFODC0002, xpErr.Code)
 }
 
 // H1: fn:doc / fn:unparsed-text must be secure-by-default — no implicit
@@ -89,7 +90,7 @@ func TestFnDocNoNetworkByDefault(t *testing.T) {
 
 	var xpErr *xpath3.XPathError
 	require.ErrorAs(t, err, &xpErr)
-	require.Equal(t, "FODC0002", xpErr.Code)
+	require.Equal(t, lexicon.ErrFODC0002, xpErr.Code)
 	require.Zero(t, hits.Load(), "no HTTP request should be issued by default")
 }
 
@@ -108,7 +109,7 @@ func TestFnDocNoFileReadByDefault(t *testing.T) {
 
 	var xpErr *xpath3.XPathError
 	require.ErrorAs(t, err, &xpErr)
-	require.Equal(t, "FODC0002", xpErr.Code)
+	require.Equal(t, lexicon.ErrFODC0002, xpErr.Code)
 }
 
 func TestFnDocNoFileURIReadByDefault(t *testing.T) {
@@ -126,7 +127,7 @@ func TestFnDocNoFileURIReadByDefault(t *testing.T) {
 
 	var xpErr *xpath3.XPathError
 	require.ErrorAs(t, err, &xpErr)
-	require.Equal(t, "FODC0002", xpErr.Code)
+	require.Equal(t, lexicon.ErrFODC0002, xpErr.Code)
 }
 
 func TestFnUnparsedTextNoNetworkByDefault(t *testing.T) {
@@ -147,7 +148,7 @@ func TestFnUnparsedTextNoNetworkByDefault(t *testing.T) {
 
 	var xpErr *xpath3.XPathError
 	require.ErrorAs(t, err, &xpErr)
-	require.Equal(t, "FOUT1170", xpErr.Code)
+	require.Equal(t, lexicon.ErrFOUT1170, xpErr.Code)
 	require.Zero(t, hits.Load(), "no HTTP request should be issued by default")
 }
 
@@ -166,7 +167,7 @@ func TestFnUnparsedTextNoFileReadByDefault(t *testing.T) {
 
 	var xpErr *xpath3.XPathError
 	require.ErrorAs(t, err, &xpErr)
-	require.Equal(t, "FOUT1170", xpErr.Code)
+	require.Equal(t, lexicon.ErrFOUT1170, xpErr.Code)
 }
 
 func TestFnDocWithExplicitHTTPClientSucceeds(t *testing.T) {

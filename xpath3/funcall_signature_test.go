@@ -193,7 +193,7 @@ func TestSignatureGatePropagatesFOTY0013(t *testing.T) {
 
 	var xpErr *xpath3.XPathError
 	require.ErrorAs(t, err, &xpErr)
-	require.Equal(t, "FOTY0013", xpErr.Code)
+	require.Equal(t, lexicon.ErrFOTY0013, xpErr.Code)
 }
 
 // Finding 1: an invalid xs:untypedAtomic→numeric cast inside the signature gate
@@ -205,7 +205,7 @@ func TestSignatureGatePropagatesFORG0001(t *testing.T) {
 
 	var xpErr *xpath3.XPathError
 	require.ErrorAs(t, err, &xpErr)
-	require.Equal(t, "FORG0001", xpErr.Code)
+	require.Equal(t, lexicon.ErrFORG0001, xpErr.Code)
 }
 
 // Finding 1: a plain type/cardinality mismatch (no typed atomization/cast error)
@@ -661,7 +661,7 @@ func TestPartialApplicationPropagatesTypedError(t *testing.T) {
 	require.Error(t, err)
 	var xpErr *xpath3.XPathError
 	require.ErrorAs(t, err, &xpErr)
-	require.Equal(t, "FORG0001", xpErr.Code)
+	require.Equal(t, lexicon.ErrFORG0001, xpErr.Code)
 }
 
 // Finding (named function ref): a named function reference (f#N) to a

@@ -6,6 +6,7 @@ import (
 	"math"
 	"time"
 
+	"github.com/lestrrat-go/helium/internal/lexicon"
 	ixpath "github.com/lestrrat-go/helium/internal/xpath"
 )
 
@@ -51,7 +52,7 @@ func xpath10CompatStringItem(seq Sequence) (AtomicValue, error) {
 	item := seq.Get(0)
 	switch item.(type) {
 	case FunctionItem, MapItem, ArrayItem:
-		return AtomicValue{}, &XPathError{Code: errCodeFOTY0014, Message: "xpath 1.0 compatibility: cannot take string value of a function item"}
+		return AtomicValue{}, &XPathError{Code: lexicon.ErrFOTY0014, Message: "xpath 1.0 compatibility: cannot take string value of a function item"}
 	}
 	if ni, ok := item.(NodeItem); ok {
 		return AtomicValue{TypeName: TypeString, Value: ixpath.StringValue(ni.Node)}, nil
@@ -74,7 +75,7 @@ func xpath10CompatNumberItem(seq Sequence) (AtomicValue, error) {
 	if err != nil {
 		// FOTY0013 (atomizing function items) propagates per XPath 3.1 §2.7.2.
 		var xpErr *XPathError
-		if errors.As(err, &xpErr) && xpErr.Code == errCodeFOTY0013 {
+		if errors.As(err, &xpErr) && xpErr.Code == lexicon.ErrFOTY0013 {
 			return AtomicValue{}, err
 		}
 		return doubleNaNAtom(), nil

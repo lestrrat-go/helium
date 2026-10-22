@@ -104,7 +104,7 @@ func checkSumAvgType(a AtomicValue) error {
 		return nil
 	}
 	return &XPathError{
-		Code:    errCodeFORG0006,
+		Code:    lexicon.ErrFORG0006,
 		Message: fmt.Sprintf("invalid type %s for aggregate function", a.TypeName),
 	}
 }
@@ -120,7 +120,7 @@ func checkAggregateHomogeneity(family, newFamily string) (string, error) {
 		return familyNumeric, nil
 	}
 	return "", &XPathError{
-		Code:    errCodeFORG0006,
+		Code:    lexicon.ErrFORG0006,
 		Message: fmt.Sprintf("incompatible types in aggregate: %s and %s", family, newFamily),
 	}
 }
@@ -232,7 +232,7 @@ func avgDurations(seq Sequence, family string) (Sequence, error) {
 	// overflows the value space (matching op:add-yearMonthDurations) before
 	// dividing.
 	if !totalMonths.IsInt64() {
-		return nil, &XPathError{Code: errCodeFODT0002, Message: "duration overflow"}
+		return nil, &XPathError{Code: lexicon.ErrFODT0002, Message: "duration overflow"}
 	}
 	// Divide the exact month total by the count using rational arithmetic so
 	// large totals (e.g. avg of two P9007199254740993M values) keep full
@@ -249,7 +249,7 @@ func avgDurations(seq Sequence, family string) (Sequence, error) {
 		absInt = new(big.Int).Neg(avgInt)
 	}
 	if !absInt.IsInt64() || absInt.Int64() > int64(math.MaxInt) {
-		return nil, &XPathError{Code: errCodeFODT0002, Message: "duration overflow"}
+		return nil, &XPathError{Code: lexicon.ErrFODT0002, Message: "duration overflow"}
 	}
 	return SingleAtomic(AtomicValue{
 		TypeName: TypeYearMonthDuration,
@@ -264,7 +264,7 @@ func promoteForAggregate(a AtomicValue) (AtomicValue, error) {
 			dec, err := CastFromString(s, TypeDecimal)
 			if err != nil {
 				return AtomicValue{}, &XPathError{
-					Code:    errCodeFORG0001,
+					Code:    lexicon.ErrFORG0001,
 					Message: fmt.Sprintf("cannot promote %q to xs:decimal", s),
 				}
 			}
@@ -275,7 +275,7 @@ func promoteForAggregate(a AtomicValue) (AtomicValue, error) {
 		f, err := castToDouble(a)
 		if err != nil {
 			return AtomicValue{}, &XPathError{
-				Code:    errCodeFORG0001,
+				Code:    lexicon.ErrFORG0001,
 				Message: fmt.Sprintf("cannot promote %q to xs:double", a.StringVal()),
 			}
 		}
@@ -397,7 +397,7 @@ func maxMinCommon(atoms []AtomicValue, isMax bool, coll *collationImpl) (Sequenc
 		family := aggregateTypeFamily(a)
 		if family == "" || family == lexicon.TypeDuration {
 			return nil, &XPathError{
-				Code:    errCodeFORG0006,
+				Code:    lexicon.ErrFORG0006,
 				Message: fmt.Sprintf("invalid type %s for %s", a.TypeName, fnName),
 			}
 		}
@@ -421,7 +421,7 @@ func maxMinCommon(atoms []AtomicValue, isMax bool, coll *collationImpl) (Sequenc
 		newFamily := aggregateTypeFamily(a)
 		if newFamily == "" || newFamily == "duration" {
 			return nil, &XPathError{
-				Code:    errCodeFORG0006,
+				Code:    lexicon.ErrFORG0006,
 				Message: fmt.Sprintf("invalid type %s for %s", a.TypeName, fnName),
 			}
 		}
@@ -429,7 +429,7 @@ func maxMinCommon(atoms []AtomicValue, isMax bool, coll *collationImpl) (Sequenc
 			family = newFamily
 		} else if family != newFamily {
 			return nil, &XPathError{
-				Code:    errCodeFORG0006,
+				Code:    lexicon.ErrFORG0006,
 				Message: fmt.Sprintf("incompatible types in %s: %s and %s", fnName, family, newFamily),
 			}
 		}
@@ -627,7 +627,7 @@ func sumDurations(seq Sequence, family string) (Sequence, error) {
 		absMonths = new(big.Int).Neg(totalMonths)
 	}
 	if !absMonths.IsInt64() || absMonths.Int64() > int64(math.MaxInt) {
-		return nil, &XPathError{Code: errCodeFODT0002, Message: "yearMonthDuration sum overflow"}
+		return nil, &XPathError{Code: lexicon.ErrFODT0002, Message: "yearMonthDuration sum overflow"}
 	}
 	return SingleAtomic(AtomicValue{
 		TypeName: TypeYearMonthDuration,

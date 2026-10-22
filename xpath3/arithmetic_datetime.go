@@ -184,7 +184,7 @@ func arithmeticDurationDuration(op TokenType, la, ra AtomicValue) (Sequence, boo
 			absBig = new(big.Int).Neg(resBig)
 		}
 		if !absBig.IsInt64() || absBig.Int64() > int64(math.MaxInt) {
-			return nil, true, &XPathError{Code: errCodeFODT0002, Message: "yearMonthDuration arithmetic overflow"}
+			return nil, true, &XPathError{Code: lexicon.ErrFODT0002, Message: "yearMonthDuration arithmetic overflow"}
 		}
 		return SingleAtomic(AtomicValue{
 			TypeName: typeName,
@@ -241,7 +241,7 @@ func arithmeticDurationNumber(op TokenType, dur, num AtomicValue) (Sequence, boo
 	// fall through to the float path below, which reports the proper error.
 	if nRat, ok := numericToRatExact(num); ok {
 		if op == TokenDiv && nRat.Sign() == 0 {
-			return nil, true, &XPathError{Code: errCodeFODT0002, Message: "division of duration by zero"}
+			return nil, true, &XPathError{Code: lexicon.ErrFODT0002, Message: "division of duration by zero"}
 		}
 		if dur.TypeName == TypeYearMonthDuration {
 			return arithmeticYearMonthDurationRat(op, d, nRat)
@@ -280,11 +280,11 @@ func arithmeticDurationNumber(op TokenType, dur, num AtomicValue) (Sequence, boo
 	n := num.ToFloat64()
 
 	if math.IsNaN(n) {
-		return nil, true, &XPathError{Code: "FOCA0005", Message: "NaN in duration arithmetic"}
+		return nil, true, &XPathError{Code: lexicon.ErrFOCA0005, Message: "NaN in duration arithmetic"}
 	}
 
 	if op == TokenDiv && n == 0 {
-		return nil, true, &XPathError{Code: errCodeFODT0002, Message: "division of duration by zero"}
+		return nil, true, &XPathError{Code: lexicon.ErrFODT0002, Message: "division of duration by zero"}
 	}
 
 	// Normalize duration to signed
@@ -306,14 +306,14 @@ func arithmeticDurationNumber(op TokenType, dur, num AtomicValue) (Sequence, boo
 	// (FODT0002), and converting NaN to int64 below would give a different
 	// value on each architecture.
 	if math.IsInf(months, 0) || math.IsInf(secs, 0) || math.IsNaN(months) || math.IsNaN(secs) {
-		return nil, true, &XPathError{Code: errCodeFODT0002, Message: "duration overflow"}
+		return nil, true, &XPathError{Code: lexicon.ErrFODT0002, Message: "duration overflow"}
 	}
 	// Detect precision loss for very large values
 	const maxExactFloat64 = 1 << 53
 	absSecs := math.Abs(secs)
 	absMonths := math.Abs(months)
 	if absSecs > maxExactFloat64 || absMonths > maxExactFloat64 {
-		return nil, true, &XPathError{Code: errCodeFODT0002, Message: "duration overflow"}
+		return nil, true, &XPathError{Code: lexicon.ErrFODT0002, Message: "duration overflow"}
 	}
 
 	// Per XPath F&O spec: months are rounded "half towards positive infinity"
@@ -323,7 +323,7 @@ func arithmeticDurationNumber(op TokenType, dur, num AtomicValue) (Sequence, boo
 	roundedMonths := int64(math.Floor(months + 0.5))
 	resMonths := int(roundedMonths)
 	if int64(resMonths) != roundedMonths {
-		return nil, true, &XPathError{Code: errCodeFODT0002, Message: "duration overflow: month count out of int range"}
+		return nil, true, &XPathError{Code: lexicon.ErrFODT0002, Message: "duration overflow: month count out of int range"}
 	}
 	resSecs := secs
 	negative := resMonths < 0 || (resMonths == 0 && resSecs < 0)
@@ -368,7 +368,7 @@ func arithmeticYearMonthDurationRat(op TokenType, d Duration, nRat *big.Rat) (Se
 		absInt = new(big.Int).Neg(resInt)
 	}
 	if !absInt.IsInt64() || absInt.Int64() > int64(math.MaxInt) {
-		return nil, true, &XPathError{Code: errCodeFODT0002, Message: "yearMonthDuration arithmetic overflow"}
+		return nil, true, &XPathError{Code: lexicon.ErrFODT0002, Message: "yearMonthDuration arithmetic overflow"}
 	}
 
 	return SingleAtomic(AtomicValue{
@@ -414,10 +414,10 @@ func arithmeticDateTimeDuration(op TokenType, dt, dur AtomicValue) (Sequence, bo
 		// wraps for magnitudes near math.MaxInt, so reject month magnitudes beyond a
 		// conservative bound that keeps the result within representable years.
 		if int64(months) > maxSafeAddDateMonths || int64(months) < -maxSafeAddDateMonths {
-			return nil, true, &XPathError{Code: errCodeFODT0002, Message: "date/time arithmetic overflow: month count out of range"}
+			return nil, true, &XPathError{Code: lexicon.ErrFODT0002, Message: "date/time arithmetic overflow: month count out of range"}
 		}
 		if !resultYearFits(t, int64(max(months, -months)/12+1)) {
-			return nil, true, &XPathError{Code: errCodeFODT0001, Message: "date/time arithmetic overflow: result year out of range"}
+			return nil, true, &XPathError{Code: lexicon.ErrFODT0001, Message: "date/time arithmetic overflow: result year out of range"}
 		}
 		t = addMonths(t, int64(months))
 	}
@@ -448,10 +448,10 @@ func arithmeticDateTimeDuration(op TokenType, dt, dur AtomicValue) (Sequence, bo
 		// original date unchanged). Reject any day magnitude beyond a conservative
 		// bound that keeps the result well within time.Time's representable years.
 		if days.CmpAbs(maxSafeAddDateDays) > 0 {
-			return nil, true, &XPathError{Code: errCodeFODT0002, Message: "date/time arithmetic overflow: day count out of range"}
+			return nil, true, &XPathError{Code: lexicon.ErrFODT0002, Message: "date/time arithmetic overflow: day count out of range"}
 		}
 		if !resultYearFits(t, days.Int64()/365+1) {
-			return nil, true, &XPathError{Code: errCodeFODT0001, Message: "date/time arithmetic overflow: result year out of range"}
+			return nil, true, &XPathError{Code: lexicon.ErrFODT0001, Message: "date/time arithmetic overflow: result year out of range"}
 		}
 		sign := 1
 		if neg {
@@ -600,10 +600,10 @@ func arithmeticDurationDivDuration(la, ra AtomicValue) (Sequence, bool, error) {
 	if !isYM {
 		const maxExactFloat64 = 1 << 53
 		if ld.SecRat == nil && ld.Seconds > maxExactFloat64 {
-			return nil, true, &XPathError{Code: errCodeFODT0002, Message: "dayTimeDuration value too large for exact division"}
+			return nil, true, &XPathError{Code: lexicon.ErrFODT0002, Message: "dayTimeDuration value too large for exact division"}
 		}
 		if rd.SecRat == nil && rd.Seconds > maxExactFloat64 {
-			return nil, true, &XPathError{Code: errCodeFODT0002, Message: "dayTimeDuration value too large for exact division"}
+			return nil, true, &XPathError{Code: lexicon.ErrFODT0002, Message: "dayTimeDuration value too large for exact division"}
 		}
 	}
 
@@ -611,7 +611,7 @@ func arithmeticDurationDivDuration(la, ra AtomicValue) (Sequence, bool, error) {
 	rRat := durationToRat(rd, ra.TypeName == TypeYearMonthDuration)
 
 	if rRat.Sign() == 0 {
-		return nil, true, &XPathError{Code: errCodeFOAR0002, Message: "division of duration by zero duration"}
+		return nil, true, &XPathError{Code: lexicon.ErrFOAR0002, Message: "division of duration by zero duration"}
 	}
 
 	r := new(big.Rat).Quo(lRat, rRat)

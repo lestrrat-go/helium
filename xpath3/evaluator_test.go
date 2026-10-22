@@ -9,6 +9,7 @@ import (
 	"testing"
 
 	"github.com/lestrrat-go/helium"
+	"github.com/lestrrat-go/helium/internal/lexicon"
 	"github.com/lestrrat-go/helium/xpath3"
 	"github.com/lestrrat-go/helium/xsd"
 	"github.com/stretchr/testify/require"
@@ -180,7 +181,7 @@ func TestDocEmptyArgFragmentBaseURI(t *testing.T) {
 
 	var xerr *xpath3.XPathError
 	require.ErrorAs(t, err, &xerr)
-	require.Equal(t, "FODC0005", xerr.Code)
+	require.Equal(t, lexicon.ErrFODC0005, xerr.Code)
 }
 
 func TestEvaluatorBuilders(t *testing.T) {
@@ -496,5 +497,5 @@ func TestEvaluateEBVStopsEarly(t *testing.T) {
 	_, err = eval.Evaluate(t.Context(), compiled, doc)
 	var xerr *xpath3.XPathError
 	require.ErrorAs(t, err, &xerr)
-	require.Equal(t, "FOER0000", xerr.Code)
+	require.Equal(t, lexicon.ErrFOER0000, xerr.Code)
 }

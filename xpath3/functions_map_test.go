@@ -73,7 +73,7 @@ func TestMapMergeRejectDuplicateKey(t *testing.T) {
 	require.Error(t, err, expr)
 	var xpErr *xpath3.XPathError
 	require.ErrorAs(t, err, &xpErr)
-	require.Equal(t, "FOJS0003", xpErr.Code, expr)
+	require.Equal(t, lexicon.ErrFOJS0003, xpErr.Code, expr)
 }
 
 // An invalid "duplicates" option value must raise FOJS0005, and is never
@@ -96,7 +96,7 @@ func TestMapMergeRejectsInvalidDuplicates(t *testing.T) {
 			require.Error(t, err, expr)
 			var xpErr *xpath3.XPathError
 			require.ErrorAs(t, err, &xpErr)
-			require.Equal(t, "FOJS0005", xpErr.Code, expr)
+			require.Equal(t, lexicon.ErrFOJS0005, xpErr.Code, expr)
 		})
 	}
 }
@@ -129,7 +129,7 @@ func TestMapMergeRejectsNonStringBasedDuplicates(t *testing.T) {
 	require.Error(t, err)
 	var xpErr *xpath3.XPathError
 	require.ErrorAs(t, err, &xpErr)
-	require.Equal(t, "FOJS0005", xpErr.Code)
+	require.Equal(t, lexicon.ErrFOJS0005, xpErr.Code)
 }
 
 // The ?keyword lookup-key syntax accepts XPath keyword tokens as NCName keys,

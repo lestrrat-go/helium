@@ -124,17 +124,17 @@ func evalLocationPath(evalFn exprEvaluator, ctx context.Context, ec *evalContext
 
 	if lp.Absolute {
 		if ixpath.IsNilNode(ec.node) {
-			return nil, &XPathError{Code: errCodeXPDY0002, Message: errMsgContextItemAbsent}
+			return nil, &XPathError{Code: lexicon.ErrXPDY0002, Message: errMsgContextItemAbsent}
 		}
 		root := ixpath.DocumentRoot(ec.node)
 		// XPDY0050: the root of the context node's tree must be a document node.
 		if root.Type() != helium.DocumentNode && root.Type() != helium.HTMLDocumentNode {
-			return nil, &XPathError{Code: errCodeXPDY0050, Message: "root of the tree containing the context node is not a document node"}
+			return nil, &XPathError{Code: lexicon.ErrXPDY0050, Message: "root of the tree containing the context node is not a document node"}
 		}
 		nodes = []helium.Node{root}
 	} else {
 		if ixpath.IsNilNode(ec.node) {
-			return nil, &XPathError{Code: errCodeXPDY0002, Message: errMsgContextItemAbsent}
+			return nil, &XPathError{Code: lexicon.ErrXPDY0002, Message: errMsgContextItemAbsent}
 		}
 		nodes = []helium.Node{ec.node}
 	}
@@ -193,7 +193,7 @@ func evalVMLocationPathNodes(evalFn exprEvaluator, ctx context.Context, ec *eval
 // document node, and the context node otherwise.
 func locationPathStart(ec *evalContext, lp vmLocationPathExpr) (helium.Node, error) {
 	if ixpath.IsNilNode(ec.node) {
-		return nil, &XPathError{Code: errCodeXPDY0002, Message: errMsgContextItemAbsent}
+		return nil, &XPathError{Code: lexicon.ErrXPDY0002, Message: errMsgContextItemAbsent}
 	}
 	if !lp.Absolute {
 		return ec.node, nil
@@ -201,7 +201,7 @@ func locationPathStart(ec *evalContext, lp vmLocationPathExpr) (helium.Node, err
 	root := ixpath.DocumentRoot(ec.node)
 	// XPDY0050: the root of the context node's tree must be a document node.
 	if root.Type() != helium.DocumentNode && root.Type() != helium.HTMLDocumentNode {
-		return nil, &XPathError{Code: errCodeXPDY0050, Message: "root of the tree containing the context node is not a document node"}
+		return nil, &XPathError{Code: lexicon.ErrXPDY0050, Message: "root of the tree containing the context node is not a document node"}
 	}
 	return root, nil
 }

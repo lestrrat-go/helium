@@ -70,7 +70,7 @@ func fnMapMerge(ctx context.Context, args []Sequence) (Sequence, error) {
 			case "combine":
 				duplicates = MergeCombine
 			default:
-				return nil, &XPathError{Code: errCodeFOJS0005, Message: fmt.Sprintf("map:merge: invalid value for 'duplicates' option: %q", s)}
+				return nil, &XPathError{Code: lexicon.ErrFOJS0005, Message: fmt.Sprintf("map:merge: invalid value for 'duplicates' option: %q", s)}
 			}
 		}
 	}
@@ -111,20 +111,20 @@ func coerceDuplicatesOption(ctx context.Context, val Sequence) (string, error) {
 		if isNoTypedValueError(err) {
 			return "", err
 		}
-		return "", &XPathError{Code: errCodeFOJS0005, Message: fmt.Sprintf("map:merge: 'duplicates' option must be a single string: %s", err)}
+		return "", &XPathError{Code: lexicon.ErrFOJS0005, Message: fmt.Sprintf("map:merge: 'duplicates' option must be a single string: %s", err)}
 	}
 	if count != 1 {
-		return "", &XPathError{Code: errCodeFOJS0005, Message: fmt.Sprintf("map:merge: 'duplicates' option must be a single string, got sequence of length %d", count)}
+		return "", &XPathError{Code: lexicon.ErrFOJS0005, Message: fmt.Sprintf("map:merge: 'duplicates' option must be a single string, got sequence of length %d", count)}
 	}
 	av := first
 	if av.TypeName != TypeUntypedAtomic &&
 		!isAtomicSubtypeOf(av, TypeString) &&
 		!isAtomicSubtypeOf(av, TypeAnyURI) {
-		return "", &XPathError{Code: errCodeFOJS0005, Message: fmt.Sprintf("map:merge: 'duplicates' option must be a string, got %s", av.TypeName)}
+		return "", &XPathError{Code: lexicon.ErrFOJS0005, Message: fmt.Sprintf("map:merge: 'duplicates' option must be a string, got %s", av.TypeName)}
 	}
 	s, convErr := atomicToString(av)
 	if convErr != nil {
-		return "", &XPathError{Code: errCodeFOJS0005, Message: fmt.Sprintf("map:merge: 'duplicates' option must be a single string: %s", convErr)}
+		return "", &XPathError{Code: lexicon.ErrFOJS0005, Message: fmt.Sprintf("map:merge: 'duplicates' option must be a single string: %s", convErr)}
 	}
 	return s, nil
 }

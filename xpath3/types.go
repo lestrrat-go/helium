@@ -1150,7 +1150,7 @@ func MergeMaps(maps []MapItem, policy MergePolicy) (MapItem, error) {
 					continue
 				case MergeReject:
 					return MapItem{}, &XPathError{
-						Code:    errCodeFOJS0003,
+						Code:    lexicon.ErrFOJS0003,
 						Message: fmt.Sprintf("duplicate key in map merge: %v", e.key.Value),
 					}
 				case MergeCombine:
@@ -1211,7 +1211,7 @@ func (b *MapBuilder) Add(key AtomicValue, value Sequence) error {
 			return nil
 		case MergeReject:
 			return &XPathError{
-				Code:    errCodeFOJS0003,
+				Code:    lexicon.ErrFOJS0003,
 				Message: fmt.Sprintf("duplicate key in map merge: %v", key.Value),
 			}
 		case MergeCombine:
@@ -1252,7 +1252,7 @@ func NewArray(members []Sequence) ArrayItem {
 func (a ArrayItem) Get(index int) (Sequence, error) {
 	if index < 1 || index > len(a.members) {
 		return nil, &XPathError{
-			Code:    errCodeFOAY0001,
+			Code:    lexicon.ErrFOAY0001,
 			Message: fmt.Sprintf("array index %d out of bounds (size %d)", index, len(a.members)),
 		}
 	}
@@ -1268,7 +1268,7 @@ func (a ArrayItem) Size() int {
 func (a ArrayItem) Put(index int, value Sequence) (ArrayItem, error) {
 	if index < 1 || index > len(a.members) {
 		return ArrayItem{}, &XPathError{
-			Code:    errCodeFOAY0001,
+			Code:    lexicon.ErrFOAY0001,
 			Message: fmt.Sprintf("array index %d out of bounds (size %d)", index, len(a.members)),
 		}
 	}
@@ -1302,7 +1302,7 @@ func (a ArrayItem) members0() []Sequence {
 func (a ArrayItem) get0(index int) (Sequence, error) {
 	if index < 1 || index > len(a.members) {
 		return nil, &XPathError{
-			Code:    errCodeFOAY0001,
+			Code:    lexicon.ErrFOAY0001,
 			Message: fmt.Sprintf("array index %d out of bounds (size %d)", index, len(a.members)),
 		}
 	}
@@ -1317,7 +1317,7 @@ func (a ArrayItem) SubArray(start, length int) (ArrayItem, error) {
 	// panic. With start>=1 established first, size-start+1 cannot overflow.
 	if start < 1 || start > size+1 || length < 0 || length > size-start+1 {
 		return ArrayItem{}, &XPathError{
-			Code:    errCodeFOAY0001,
+			Code:    lexicon.ErrFOAY0001,
 			Message: fmt.Sprintf("array subarray(%d, %d) out of bounds (size %d)", start, length, size),
 		}
 	}
@@ -1557,7 +1557,7 @@ func AtomizeItem(item Item) (AtomicValue, error) {
 		// XPath 3.1: atomizing an array atomizes each member and concatenates
 		if v.Size() == 0 {
 			return AtomicValue{}, &XPathError{
-				Code:    errCodeFOTY0013,
+				Code:    lexicon.ErrFOTY0013,
 				Message: "cannot atomize empty array to single atomic value",
 			}
 		}
@@ -1568,12 +1568,12 @@ func AtomizeItem(item Item) (AtomicValue, error) {
 			}
 		}
 		return AtomicValue{}, &XPathError{
-			Code:    errCodeFOTY0013,
+			Code:    lexicon.ErrFOTY0013,
 			Message: "cannot atomize array with multiple members to single atomic value",
 		}
 	default:
 		return AtomicValue{}, &XPathError{
-			Code:    errCodeFOTY0013,
+			Code:    lexicon.ErrFOTY0013,
 			Message: fmt.Sprintf("cannot atomize %T", item),
 		}
 	}

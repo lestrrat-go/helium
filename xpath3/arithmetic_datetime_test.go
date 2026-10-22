@@ -7,12 +7,13 @@ import (
 	"testing"
 
 	"github.com/lestrrat-go/helium"
+	"github.com/lestrrat-go/helium/internal/lexicon"
 	"github.com/lestrrat-go/helium/xpath3"
 	"github.com/stretchr/testify/require"
 )
 
 // codeFODT0002 is the duration overflow error code.
-const codeFODT0002 = "FODT0002"
+const codeFODT0002 = lexicon.ErrFODT0002
 
 // TestDurationFractionalSeconds guards against double-counting fractional
 // seconds when a dayTimeDuration carries an exact FracSec component alongside
@@ -552,7 +553,7 @@ func TestDateArithmeticResultYearLimit(t *testing.T) {
 	const expr = `xs:date("999999999-01-01") + xs:yearMonthDuration("P178956970Y")`
 	if strconv.IntSize == 32 {
 		err := evalExprErr(t, doc, expr)
-		require.ErrorIs(t, err, &xpath3.XPathError{Code: "FODT0001"})
+		require.ErrorIs(t, err, &xpath3.XPathError{Code: lexicon.ErrFODT0001})
 		return
 	}
 	seq := evalExpr(t, doc, expr)

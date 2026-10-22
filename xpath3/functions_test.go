@@ -555,7 +555,7 @@ func TestFnArrayIntegerPositions(t *testing.T) {
 	}
 
 	// Non-integer or wrong-cardinality position arguments must raise XPTY0004.
-	t.Run("XPTY0004", func(t *testing.T) {
+	t.Run(lexicon.ErrXPTY0004, func(t *testing.T) {
 		for _, expr := range []string{
 			`array:remove([1, 2], 1.5)`,
 			`array:subarray([1, 2, 3], 1.5)`,
@@ -565,13 +565,13 @@ func TestFnArrayIntegerPositions(t *testing.T) {
 			`array:insert-before([1, 2], (), 9)`,
 		} {
 			t.Run(expr, func(t *testing.T) {
-				evalErrCode(t, expr, "XPTY0004")
+				evalErrCode(t, expr, lexicon.ErrXPTY0004)
 			})
 		}
 	})
 
 	// Out-of-range integer positions must raise FOAY0001.
-	t.Run("FOAY0001", func(t *testing.T) {
+	t.Run(lexicon.ErrFOAY0001, func(t *testing.T) {
 		for _, expr := range []string{
 			`array:remove([1, 2], 5)`,
 			`array:insert-before([1, 2], 0, 9)`,
@@ -584,7 +584,7 @@ func TestFnArrayIntegerPositions(t *testing.T) {
 			`array:get([10, 20, 30], 4294967296 + 1)`,
 		} {
 			t.Run(expr, func(t *testing.T) {
-				evalErrCode(t, expr, "FOAY0001")
+				evalErrCode(t, expr, lexicon.ErrFOAY0001)
 			})
 		}
 	})
@@ -650,29 +650,29 @@ func TestFnCodepointsToStringRange(t *testing.T) {
 	}
 
 	t.Run("non-integer is a type error", func(t *testing.T) {
-		evalErrCode(t, `codepoints-to-string(65.9)`, "XPTY0004")
+		evalErrCode(t, `codepoints-to-string(65.9)`, lexicon.ErrXPTY0004)
 	})
 
 	t.Run("high-precision fractional decimal is a type error", func(t *testing.T) {
 		// xs:decimal keeps full precision (*big.Rat); this value rounds to 65.0
 		// as float64 and must not slip past the integrality check.
-		evalErrCode(t, `codepoints-to-string(65.000000000000000000000000001)`, "XPTY0004")
+		evalErrCode(t, `codepoints-to-string(65.000000000000000000000000001)`, lexicon.ErrXPTY0004)
 	})
 
 	t.Run("value beyond int64 is FOCH0001", func(t *testing.T) {
 		// 2^64 + 65 wraps to 65 ("A") via big.Int.Int64(); must error instead.
-		evalErrCode(t, `codepoints-to-string(18446744073709551681)`, "FOCH0001")
+		evalErrCode(t, `codepoints-to-string(18446744073709551681)`, lexicon.ErrFOCH0001)
 	})
 
 	t.Run("huge integer-valued float is FOCH0001", func(t *testing.T) {
 		// 1e300 is integer-valued so it passes the fractional check, but is far
 		// beyond the codepoint range; int(f) is implementation-defined, so the
 		// range must be validated before the conversion.
-		evalErrCode(t, `codepoints-to-string(1e300)`, "FOCH0001")
+		evalErrCode(t, `codepoints-to-string(1e300)`, lexicon.ErrFOCH0001)
 	})
 
 	t.Run("negative integer-valued float is FOCH0001", func(t *testing.T) {
-		evalErrCode(t, `codepoints-to-string(-1.0)`, "FOCH0001")
+		evalErrCode(t, `codepoints-to-string(-1.0)`, lexicon.ErrFOCH0001)
 	})
 
 	t.Run("integer codepoint still works", func(t *testing.T) {
@@ -740,7 +740,7 @@ func TestBuiltinArgValidation(t *testing.T) {
 		}
 		for _, expr := range cases {
 			t.Run(expr, func(t *testing.T) {
-				evalErrCode(t, expr, "XPTY0004")
+				evalErrCode(t, expr, lexicon.ErrXPTY0004)
 			})
 		}
 	})
@@ -838,7 +838,7 @@ func TestFnDateTime(t *testing.T) {
 		require.NoError(t, err)
 		_, err = xpath3.NewEvaluator(xpath3.DefaultEvaluatorOptions).Evaluate(t.Context(), compiled, doc)
 		require.Error(t, err)
-		require.ErrorIs(t, err, &xpath3.XPathError{Code: "XPTY0004"})
+		require.ErrorIs(t, err, &xpath3.XPathError{Code: lexicon.ErrXPTY0004})
 	})
 
 	t.Run("dateTime as second arg is a type error", func(t *testing.T) {
@@ -848,7 +848,7 @@ func TestFnDateTime(t *testing.T) {
 		require.NoError(t, err)
 		_, err = xpath3.NewEvaluator(xpath3.DefaultEvaluatorOptions).Evaluate(t.Context(), compiled, doc)
 		require.Error(t, err)
-		require.ErrorIs(t, err, &xpath3.XPathError{Code: "XPTY0004"})
+		require.ErrorIs(t, err, &xpath3.XPathError{Code: lexicon.ErrXPTY0004})
 	})
 }
 
@@ -1062,7 +1062,7 @@ func TestFunctionLookupTypedParamValidation(t *testing.T) {
 		require.NoError(t, err)
 		_, err = eval.Evaluate(t.Context(), compiled, doc)
 		require.Error(t, err)
-		require.ErrorIs(t, err, &xpath3.XPathError{Code: "FORG0001"})
+		require.ErrorIs(t, err, &xpath3.XPathError{Code: lexicon.ErrFORG0001})
 	})
 }
 
@@ -1231,26 +1231,26 @@ func TestFnRoundPrecisionArgValidation(t *testing.T) {
 
 	t.Run("empty arg does not excuse bad precision", func(t *testing.T) {
 		// An ill-typed precision is a type error even when $arg is ().
-		evalErrCode(t, `round((), "bad")`, "XPTY0004")
-		evalErrCode(t, `round-half-to-even((), "bad")`, "XPTY0004")
+		evalErrCode(t, `round((), "bad")`, lexicon.ErrXPTY0004)
+		evalErrCode(t, `round-half-to-even((), "bad")`, lexicon.ErrXPTY0004)
 		// An empty precision in the 2-arg form violates exactly-one cardinality.
-		evalErrCode(t, `round((), ())`, "XPTY0004")
+		evalErrCode(t, `round((), ())`, lexicon.ErrXPTY0004)
 	})
 
 	t.Run("empty precision is a cardinality error", func(t *testing.T) {
-		evalErrCode(t, `round(1, ())`, "XPTY0004")
-		evalErrCode(t, `round-half-to-even(1.5, ())`, "XPTY0004")
+		evalErrCode(t, `round(1, ())`, lexicon.ErrXPTY0004)
+		evalErrCode(t, `round-half-to-even(1.5, ())`, lexicon.ErrXPTY0004)
 	})
 
 	t.Run("non-integer precision rejected", func(t *testing.T) {
 		// No implicit numeric/boolean truncation to xs:integer.
-		evalErrCode(t, `round(123.45, true())`, "XPTY0004")
-		evalErrCode(t, `round(123.45, 1.9)`, "XPTY0004")
-		evalErrCode(t, `round(123.45, 2.0)`, "XPTY0004")
-		evalErrCode(t, `round(123.45, xs:double(2))`, "XPTY0004")
-		evalErrCode(t, `round(123.45, xs:float(2))`, "XPTY0004")
-		evalErrCode(t, `round(123.45, "2")`, "XPTY0004")
-		evalErrCode(t, `round-half-to-even(123456e-2, "two")`, "XPTY0004")
+		evalErrCode(t, `round(123.45, true())`, lexicon.ErrXPTY0004)
+		evalErrCode(t, `round(123.45, 1.9)`, lexicon.ErrXPTY0004)
+		evalErrCode(t, `round(123.45, 2.0)`, lexicon.ErrXPTY0004)
+		evalErrCode(t, `round(123.45, xs:double(2))`, lexicon.ErrXPTY0004)
+		evalErrCode(t, `round(123.45, xs:float(2))`, lexicon.ErrXPTY0004)
+		evalErrCode(t, `round(123.45, "2")`, lexicon.ErrXPTY0004)
+		evalErrCode(t, `round-half-to-even(123456e-2, "two")`, lexicon.ErrXPTY0004)
 	})
 
 	t.Run("integer precision and subtypes accepted", func(t *testing.T) {
@@ -1360,7 +1360,7 @@ func TestFnRoundNonTerminatingHugePrecision(t *testing.T) {
 			select {
 			case ferr := <-done:
 				require.Error(t, ferr, "expected FOAR0002 for %q", expr)
-				require.ErrorIs(t, ferr, &xpath3.XPathError{Code: "FOAR0002"}, "expected FOAR0002 for %q", expr)
+				require.ErrorIs(t, ferr, &xpath3.XPathError{Code: lexicon.ErrFOAR0002}, "expected FOAR0002 for %q", expr)
 			case <-time.After(10 * time.Second):
 				t.Fatalf("round(%q) did not return promptly (DoS)", expr)
 			}
@@ -1478,7 +1478,7 @@ func TestFnSequenceIntegerCardinalityArgs(t *testing.T) {
 		return out
 	}
 
-	t.Run("XPTY0004", func(t *testing.T) {
+	t.Run(lexicon.ErrXPTY0004, func(t *testing.T) {
 		for _, expr := range []string{
 			`insert-before(("a"), "not-a-position", "b")`,
 			`insert-before(("a"), 2.9, "b")`,
@@ -1486,7 +1486,7 @@ func TestFnSequenceIntegerCardinalityArgs(t *testing.T) {
 			`subsequence(("a","b","c"), (2, 3))`,
 			`subsequence(("a","b","c"), 2, (1, 2))`,
 		} {
-			t.Run(expr, func(t *testing.T) { evalErrCode(t, expr, "XPTY0004") })
+			t.Run(expr, func(t *testing.T) { evalErrCode(t, expr, lexicon.ErrXPTY0004) })
 		}
 	})
 
@@ -1525,12 +1525,12 @@ func TestFnIndexOfSearchCardinality(t *testing.T) {
 			`index-of((1, 2, 1), (1, 2))`,
 			`index-of(("a", "b", "a"), ("a", "b"))`,
 		} {
-			t.Run(expr, func(t *testing.T) { evalErrCode(t, expr, "XPTY0004") })
+			t.Run(expr, func(t *testing.T) { evalErrCode(t, expr, lexicon.ErrXPTY0004) })
 		}
 	})
 
 	t.Run("empty search raises XPTY0004", func(t *testing.T) {
-		evalErrCode(t, `index-of((1, 2, 1), ())`, "XPTY0004")
+		evalErrCode(t, `index-of((1, 2, 1), ())`, lexicon.ErrXPTY0004)
 	})
 
 	t.Run("single-item search still works", func(t *testing.T) {

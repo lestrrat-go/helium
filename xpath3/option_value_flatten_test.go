@@ -4,6 +4,7 @@ import (
 	"errors"
 	"testing"
 
+	"github.com/lestrrat-go/helium/internal/lexicon"
 	"github.com/lestrrat-go/helium/xpath3"
 	"github.com/stretchr/testify/require"
 )
@@ -90,7 +91,7 @@ func TestOptionValueCardinalityStillEnforced(t *testing.T) {
 		require.Error(t, err)
 		var xerr *xpath3.XPathError
 		require.True(t, errors.As(err, &xerr), "want *xpath3.XPathError, got %T: %v", err, err)
-		require.Equal(t, "XPTY0004", xerr.Code)
+		require.Equal(t, lexicon.ErrXPTY0004, xerr.Code)
 	}
 
 	t.Run("json-to-xml duplicates two atoms XPTY0004", func(t *testing.T) {

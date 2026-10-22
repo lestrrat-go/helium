@@ -36,7 +36,7 @@ func fnQName(_ context.Context, args []Sequence) (Sequence, error) {
 	}
 	// Validate: if there's a prefix, namespace must be non-empty
 	if prefix != "" && uri == "" {
-		return nil, &XPathError{Code: errCodeFOCA0002, Message: "namespace must not be empty when QName has a prefix"}
+		return nil, &XPathError{Code: lexicon.ErrFOCA0002, Message: "namespace must not be empty when QName has a prefix"}
 	}
 	return SingleAtomic(AtomicValue{
 		TypeName: TypeQName,
@@ -179,7 +179,7 @@ func fnResolveQName(_ context.Context, args []Sequence) (Sequence, error) {
 	if prefix != "" {
 		ns := helium.LookupNSByPrefix(elem, prefix)
 		if ns == nil {
-			return nil, &XPathError{Code: errCodeFONS0004, Message: "resolve-QName: no namespace binding for prefix " + prefix}
+			return nil, &XPathError{Code: lexicon.ErrFONS0004, Message: "resolve-QName: no namespace binding for prefix " + prefix}
 		}
 		uri = ns.URI()
 	} else {
@@ -207,14 +207,14 @@ func parseLexicalQName(qname string) (string, string, error) {
 		prefix = p
 		local = l
 		if prefix == "" {
-			return "", "", &XPathError{Code: errCodeFOCA0002, Message: "invalid QName: " + qname}
+			return "", "", &XPathError{Code: lexicon.ErrFOCA0002, Message: "invalid QName: " + qname}
 		}
 	}
 	if prefix != "" && !xmlchar.IsValidNCName(prefix) {
-		return "", "", &XPathError{Code: errCodeFOCA0002, Message: "invalid prefix in QName: " + prefix}
+		return "", "", &XPathError{Code: lexicon.ErrFOCA0002, Message: "invalid prefix in QName: " + prefix}
 	}
 	if !xmlchar.IsValidNCName(local) {
-		return "", "", &XPathError{Code: errCodeFOCA0002, Message: "invalid local name in QName: " + local}
+		return "", "", &XPathError{Code: lexicon.ErrFOCA0002, Message: "invalid local name in QName: " + local}
 	}
 	return prefix, local, nil
 }

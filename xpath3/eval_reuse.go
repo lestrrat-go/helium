@@ -6,6 +6,7 @@ import (
 	"time"
 
 	"github.com/lestrrat-go/helium"
+	"github.com/lestrrat-go/helium/internal/lexicon"
 	ixpath "github.com/lestrrat-go/helium/internal/xpath"
 )
 
@@ -102,7 +103,7 @@ func (e *Expression) EvaluateReuse(ctx context.Context, state *EvalState, node h
 			return Result{seq: ItemSlice(state.oneItem[:])}, nil
 		}
 		if ec.node == nil {
-			return Result{}, &XPathError{Code: errCodeXPDY0002, Message: errMsgContextItemAbsent}
+			return Result{}, &XPathError{Code: lexicon.ErrXPDY0002, Message: errMsgContextItemAbsent}
 		}
 		state.oneItem[0] = nodeItemFor(ctx, ec, ec.node)
 		return Result{seq: ItemSlice(state.oneItem[:])}, nil

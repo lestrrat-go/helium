@@ -19,7 +19,7 @@ func checkedArrayIndex(a AtomicValue) (int, error) {
 		return arrayIndexFromInt64(v)
 	case *big.Int:
 		if !v.IsInt64() {
-			return 0, &XPathError{Code: errCodeFOAY0001, Message: "array index out of range"}
+			return 0, &XPathError{Code: lexicon.ErrFOAY0001, Message: "array index out of range"}
 		}
 		return arrayIndexFromInt64(v.Int64())
 	default:
@@ -30,7 +30,7 @@ func checkedArrayIndex(a AtomicValue) (int, error) {
 func arrayIndexFromInt64(v int64) (int, error) {
 	n := int(v)
 	if int64(n) != v {
-		return 0, &XPathError{Code: errCodeFOAY0001, Message: "array index out of range"}
+		return 0, &XPathError{Code: lexicon.ErrFOAY0001, Message: "array index out of range"}
 	}
 	return n, nil
 }
@@ -61,7 +61,7 @@ func evalUnaryLookupExpr(evalFn exprEvaluator, ctx context.Context, ec *evalCont
 		return lookupItem(evalFn, ctx, ec, ec.contextItem, e.Key, e.All)
 	}
 	if ec.node == nil {
-		return nil, &XPathError{Code: errCodeXPDY0002, Message: errMsgContextItemAbsent}
+		return nil, &XPathError{Code: lexicon.ErrXPDY0002, Message: errMsgContextItemAbsent}
 	}
 	return lookupItem(evalFn, ctx, ec, NodeItem{Node: ec.node}, e.Key, e.All)
 }
@@ -420,7 +420,7 @@ func catchCodeMatches(catchCode string, errQName QNameValue) bool {
 func buildCatchContext(ec *evalContext, xpErr *XPathError) *evalContext {
 	errQName := xpErr.qname()
 	if errQName.Local == "" {
-		errQName = QNameValue{Prefix: lexicon.PrefixErr, URI: NSErr, Local: errCodeFOER0000}
+		errQName = QNameValue{Prefix: lexicon.PrefixErr, URI: NSErr, Local: lexicon.ErrFOER0000}
 	}
 	errQN := SingleAtomic(AtomicValue{
 		TypeName: TypeQName,

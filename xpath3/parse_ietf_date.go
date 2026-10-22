@@ -7,6 +7,8 @@ import (
 	"strings"
 	"time"
 	"unicode"
+
+	"github.com/lestrrat-go/helium/internal/lexicon"
 )
 
 func init() {
@@ -26,7 +28,7 @@ func fnParseIETFDate(ctx context.Context, args []Sequence) (Sequence, error) {
 	t, err := parseIETFDate(s)
 	if err != nil {
 		return nil, &XPathError{
-			Code:    "FORG0010",
+			Code:    lexicon.ErrFORG0010,
 			Message: fmt.Sprintf("fn:parse-ietf-date: invalid date string: %s", err),
 		}
 	}

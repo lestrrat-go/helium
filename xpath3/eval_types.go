@@ -110,7 +110,7 @@ func schemaAwareValidateTarget(ctx context.Context, ec *evalContext, av AtomicVa
 	s, nsForCast := schemaAwareCastLexical(av, ec.namespaces)
 	annName := QAnnotation(ns, local)
 	if err := ec.schemaDeclarations.ValidateCastWithNS(ctx, s, annName, nsForCast); err != nil {
-		return &XPathError{Code: errCodeFORG0001, Message: fmt.Sprintf("cannot cast %q to %s: %v", s, targetType, err)}
+		return &XPathError{Code: lexicon.ErrFORG0001, Message: fmt.Sprintf("cannot cast %q to %s: %v", s, targetType, err)}
 	}
 	return nil
 }
@@ -140,7 +140,7 @@ func schemaAwareCastViaBuiltin(ctx context.Context, ec *evalContext, av AtomicVa
 		}
 		s, nsForCast := schemaAwareCastLexical(av, ec.namespaces)
 		if vErr := ec.schemaDeclarations.ValidateCastWithNS(ctx, s, annName, nsForCast); vErr != nil {
-			return AtomicValue{}, &XPathError{Code: errCodeFORG0001, Message: fmt.Sprintf("cannot cast %q to %s: %v", s, targetType, vErr)}
+			return AtomicValue{}, &XPathError{Code: lexicon.ErrFORG0001, Message: fmt.Sprintf("cannot cast %q to %s: %v", s, targetType, vErr)}
 		}
 		qv, qErr := castToQName(av, ec)
 		if qErr != nil {
@@ -156,7 +156,7 @@ func schemaAwareCastViaBuiltin(ctx context.Context, ec *evalContext, av AtomicVa
 	}
 	s, nsForCast := schemaAwareFacetLexical(av, result, ec.namespaces)
 	if facetErr := ec.schemaDeclarations.ValidateCastWithNS(ctx, s, annName, nsForCast); facetErr != nil {
-		return AtomicValue{}, &XPathError{Code: errCodeFORG0001, Message: fmt.Sprintf("cannot cast %q to %s: %v", s, targetType, facetErr)}
+		return AtomicValue{}, &XPathError{Code: lexicon.ErrFORG0001, Message: fmt.Sprintf("cannot cast %q to %s: %v", s, targetType, facetErr)}
 	}
 	result.BaseType = builtinBase
 	result.TypeName = targetType
@@ -167,7 +167,7 @@ func evalCastExpr(evalFn exprEvaluator, ctx context.Context, ec *evalContext, e 
 	targetType := resolveAtomicTypeName(e.Type, ec)
 	if isAbstractCastTarget(targetType) {
 		return nil, &XPathError{
-			Code:    errCodeXPST0080,
+			Code:    lexicon.ErrXPST0080,
 			Message: fmt.Sprintf("cannot use abstract type %s as cast target", targetType),
 		}
 	}
@@ -232,7 +232,7 @@ func evalCastableExpr(evalFn exprEvaluator, ctx context.Context, ec *evalContext
 	// Abstract types raise a static error even for castable (XPST0080)
 	if isAbstractCastTarget(targetType) {
 		return nil, &XPathError{
-			Code:    errCodeXPST0080,
+			Code:    lexicon.ErrXPST0080,
 			Message: fmt.Sprintf("cannot use abstract type %s as castable target", targetType),
 		}
 	}
@@ -251,7 +251,7 @@ func evalCastableExpr(evalFn exprEvaluator, ctx context.Context, ec *evalContext
 		// isn't a bad lexical, it's not atomizable at all (F&O 3.1 §19.1; QT3
 		// CastableAs666/668). Other atomization failures mean "not castable".
 		var xpErr *XPathError
-		if errors.As(err, &xpErr) && xpErr.Code == errCodeFOTY0013 {
+		if errors.As(err, &xpErr) && xpErr.Code == lexicon.ErrFOTY0013 {
 			return nil, err
 		}
 		return SingleBoolean(false), nil
@@ -328,21 +328,21 @@ func castableToUserList(ctx context.Context, ec *evalContext, av AtomicValue, li
 // to the item type, a non-string source, or a list-facet violation is FORG0001.
 func castToUserList(ctx context.Context, ec *evalContext, av AtomicValue, listType, itemType string) (Sequence, error) {
 	if av.TypeName != TypeString && av.TypeName != TypeUntypedAtomic {
-		return nil, &XPathError{Code: errCodeFORG0001, Message: fmt.Sprintf("cannot cast %s to list type %s", av.TypeName, listType)}
+		return nil, &XPathError{Code: lexicon.ErrFORG0001, Message: fmt.Sprintf("cannot cast %s to list type %s", av.TypeName, listType)}
 	}
 	s, err := AtomicToString(av)
 	if err != nil {
 		return nil, err
 	}
 	if vErr := ec.schemaDeclarations.ValidateCastWithNS(ctx, s, listType, ec.namespaces); vErr != nil {
-		return nil, &XPathError{Code: errCodeFORG0001, Message: fmt.Sprintf("cannot cast %q to %s: %v", s, listType, vErr)}
+		return nil, &XPathError{Code: lexicon.ErrFORG0001, Message: fmt.Sprintf("cannot cast %q to %s: %v", s, listType, vErr)}
 	}
 	tokens := xsdListFields(s)
 	items := make(ItemSlice, 0, len(tokens))
 	for _, tok := range tokens {
 		cast, castErr := schemaAwareCast(ctx, ec, AtomicValue{TypeName: TypeString, Value: tok}, itemType)
 		if castErr != nil {
-			return nil, &XPathError{Code: errCodeFORG0001, Message: fmt.Sprintf("cannot cast token %q to %s: %v", tok, itemType, castErr)}
+			return nil, &XPathError{Code: lexicon.ErrFORG0001, Message: fmt.Sprintf("cannot cast token %q to %s: %v", tok, itemType, castErr)}
 		}
 		items = append(items, cast)
 	}
@@ -380,7 +380,7 @@ func evalTreatAsExpr(evalFn exprEvaluator, ctx context.Context, ec *evalContext,
 		return nil, err
 	}
 	if !matchesSequenceType(seq, e.Type, ec) {
-		return nil, &XPathError{Code: errCodeXPDY0050, Message: fmt.Sprintf("treat as: sequence does not match required type %v (actual length %d)", e.Type, seqLen(seq))}
+		return nil, &XPathError{Code: lexicon.ErrXPDY0050, Message: fmt.Sprintf("treat as: sequence does not match required type %v (actual length %d)", e.Type, seqLen(seq))}
 	}
 	return seq, nil
 }
@@ -1439,7 +1439,7 @@ func castToQName(v AtomicValue, ec *evalContext) (AtomicValue, error) {
 	prefix, local, _, validNC := domutil.SplitLexicalQName(v.StringVal())
 	if !validNC {
 		return AtomicValue{}, &XPathError{
-			Code:    errCodeFORG0001,
+			Code:    lexicon.ErrFORG0001,
 			Message: fmt.Sprintf("invalid QName: %q", strings.TrimSpace(v.StringVal())),
 		}
 	}
@@ -1462,7 +1462,7 @@ func castToQName(v AtomicValue, ec *evalContext) (AtomicValue, error) {
 		}
 		if !resolved {
 			return AtomicValue{}, &XPathError{
-				Code:    errCodeFONS0004,
+				Code:    lexicon.ErrFONS0004,
 				Message: fmt.Sprintf("no namespace binding for prefix %q", prefix),
 			}
 		}

@@ -160,7 +160,7 @@ func TestPrefixedVariableRequiresDeclaredNamespace(t *testing.T) {
 
 	var xpErr *xpath3.XPathError
 	require.ErrorAs(t, err, &xpErr)
-	require.Equal(t, "XPST0081", xpErr.Code)
+	require.Equal(t, lexicon.ErrXPST0081, xpErr.Code)
 }
 
 func TestInlineFunctionDoesNotInheritFocus(t *testing.T) {
@@ -172,7 +172,7 @@ func TestInlineFunctionDoesNotInheritFocus(t *testing.T) {
 
 	var xpErr *xpath3.XPathError
 	require.ErrorAs(t, err, &xpErr)
-	require.Equal(t, "XPDY0002", xpErr.Code)
+	require.Equal(t, lexicon.ErrXPDY0002, xpErr.Code)
 }
 
 func TestNilContextRangeExpr(t *testing.T) {
@@ -644,7 +644,7 @@ func TestPublicStringArgsPreserveAtomizationErrors(t *testing.T) {
 
 			var xpErr *xpath3.XPathError
 			require.ErrorAs(t, err, &xpErr)
-			require.Equal(t, "FOTY0013", xpErr.Code)
+			require.Equal(t, lexicon.ErrFOTY0013, xpErr.Code)
 		})
 	}
 }
@@ -658,7 +658,7 @@ func TestResolveQNameRejectsMalformedQName(t *testing.T) {
 
 	var xpErr *xpath3.XPathError
 	require.ErrorAs(t, err, &xpErr)
-	require.Equal(t, "FOCA0002", xpErr.Code)
+	require.Equal(t, lexicon.ErrFOCA0002, xpErr.Code)
 }
 
 func TestJSONDocUsesURIResolverAndBaseURI(t *testing.T) {
@@ -881,7 +881,7 @@ func TestStringFunctionsRejectMultiItemSequences(t *testing.T) {
 		{name: "substring position", expr: `substring("abc", (1, 2))`, code: lexicon.ErrXPTY0004},
 		{name: "resolve-uri", expr: `resolve-uri(("a", "b"), "http://example.com/")`, code: lexicon.ErrXPTY0004},
 		{name: "regex input", expr: `matches(("abc", "def"), "a")`, code: lexicon.ErrXPTY0004},
-		{name: "concat operator map", expr: `map{} || "x"`, code: "FOTY0014"},
+		{name: "concat operator map", expr: `map{} || "x"`, code: lexicon.ErrFOTY0014},
 	}
 
 	for _, tt := range tests {
@@ -1428,7 +1428,7 @@ func TestUndeclaredPrefixInPathStep(t *testing.T) {
 		}).
 		Evaluate(t.Context(), compiled, doc)
 	require.Error(t, err, "undeclared prefix in path step must be rejected")
-	require.Contains(t, err.Error(), "XPST0081")
+	require.Contains(t, err.Error(), lexicon.ErrXPST0081)
 }
 
 // --- Op limit ---
@@ -1598,7 +1598,7 @@ func TestArrayLookupRejectsOversizedIndex(t *testing.T) {
 
 	var xpErr *xpath3.XPathError
 	require.ErrorAs(t, err, &xpErr)
-	require.Equal(t, "FOAY0001", xpErr.Code)
+	require.Equal(t, lexicon.ErrFOAY0001, xpErr.Code)
 }
 
 func TestConcurrentEvaluate(t *testing.T) {
@@ -1833,7 +1833,7 @@ func TestResultEBV(t *testing.T) {
 	eval := evaluators["plain"]
 	for src, want := range map[string]any{
 		"/*/b": true, "//nosuch": false, "(//b, 1)": true, "xs:double('NaN')": false, "''": false, "'a'": true,
-		"(1, 2)": "FORG0006", "('a', //b)": "FORG0006", "[1]": "FORG0006", "xs:date('2000-01-01')": "FORG0006",
+		"(1, 2)": lexicon.ErrFORG0006, "('a', //b)": lexicon.ErrFORG0006, "[1]": lexicon.ErrFORG0006, "xs:date('2000-01-01')": lexicon.ErrFORG0006,
 	} {
 		r, err := eval.Evaluate(t.Context(), xpath3.NewCompiler().MustCompile(src), doc)
 		require.NoError(t, err, src)

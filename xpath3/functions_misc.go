@@ -193,9 +193,9 @@ func fnImplicitTimezone(ctx context.Context, _ []Sequence) (Sequence, error) {
 }
 
 func fnLoadXQueryModule(_ context.Context, _ []Sequence) (Sequence, error) {
-	return nil, &XPathError{Code: errCodeFOER0000, Message: "fn:load-xquery-module is not implemented"}
+	return nil, &XPathError{Code: lexicon.ErrFOER0000, Message: "fn:load-xquery-module is not implemented"}
 }
 
 func fnTransform(_ context.Context, _ []Sequence) (Sequence, error) {
-	return nil, &XPathError{Code: errCodeFOER0000, Message: "fn:transform is not implemented"}
+	return nil, &XPathError{Code: lexicon.ErrFOER0000, Message: "fn:transform is not implemented"}
 }
