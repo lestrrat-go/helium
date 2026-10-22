@@ -5,8 +5,46 @@ import (
 	"errors"
 	"fmt"
 
+	"github.com/lestrrat-go/helium"
 	"github.com/lestrrat-go/helium/internal/lexicon"
 )
+
+func functionInvocationEC(captured, caller *evalContext) *evalContext {
+	if captured == nil && caller == nil {
+		return nil
+	}
+
+	var invocation evalContext
+	if captured != nil {
+		invocation = *captured
+	} else {
+		invocation = *caller
+	}
+	if caller != nil {
+		invocation.depth = caller.depth
+		invocation.maxRecursionDepth = caller.maxRecursionDepth
+		invocation.opCount = caller.opCount
+		invocation.opLimit = caller.opLimit
+		invocation.docOrder = caller.docOrder
+		invocation.maxNodes = caller.maxNodes
+		invocation.maxResourceBytes = caller.maxResourceBytes
+		invocation.docCache = caller.docCache
+		return &invocation
+	}
+
+	// A function item invoked outside Evaluate gets independent, unlimited
+	// bookkeeping while retaining the dynamic context captured by the item.
+	opCount := 0
+	invocation.depth = 0
+	invocation.maxRecursionDepth = DefaultMaxRecursionDepth
+	invocation.opCount = &opCount
+	invocation.opLimit = 0
+	invocation.docOrder = &DocOrderCache{}
+	invocation.maxNodes = 0
+	invocation.maxResourceBytes = 0
+	invocation.docCache = make(map[string]helium.Node)
+	return &invocation
+}
 
 func evalFunctionCall(evalFn exprEvaluator, ctx context.Context, ec *evalContext, e FunctionCall) (Sequence, error) {
 	// Evaluate arguments
@@ -295,6 +333,7 @@ func evalNamedFunctionRef(ctx context.Context, ec *evalContext, e NamedFunctionR
 		ParamTypes: paramTypes,
 		ReturnType: returnType,
 		Invoke: func(ctx context.Context, args []Sequence) (Sequence, error) {
+			invocationEC := functionInvocationEC(capturedEC, getFnContext(ctx))
 			if len(args) < minArity {
 				return nil, &XPathError{Code: lexicon.ErrXPTY0004, Message: fmt.Sprintf("fn:%s requires at least %d arguments, got %d", e.Name, minArity, len(args))}
 			}
@@ -313,7 +352,7 @@ func evalNamedFunctionRef(ctx context.Context, ec *evalContext, e NamedFunctionR
 						// maps only a plain mismatch to XPTY0004 — the boolean
 						// coerceToSequenceType would flatten FOTY0012 into a generic
 						// XPTY0004.
-						c, err := coerceFuncallArg(ctx, arg, paramTypes[i], e.Name, i, capturedEC)
+						c, err := coerceFuncallArg(ctx, arg, paramTypes[i], e.Name, i, invocationEC)
 						if err != nil {
 							return nil, err
 						}
@@ -322,8 +361,7 @@ func evalNamedFunctionRef(ctx context.Context, ec *evalContext, e NamedFunctionR
 				}
 				args = coerced
 			}
-			// Use caller's ctx for cancellation, captured ec for focus/eval state
-			return fn.Call(withFnContext(ctx, capturedEC), args)
+			return fn.Call(withFnContext(ctx, invocationEC), args)
 		},
 	}
 	return ItemSlice{fi}, nil
