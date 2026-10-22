@@ -124,7 +124,9 @@ func (d *Decoder) startSAXEmitter(ctx context.Context, r io.Reader) {
 	// nsScope tracks in-scope namespace prefix→URI bindings across
 	// nested elements so that prefixed attributes can be resolved even
 	// when the namespace declaration is on an ancestor element.
-	nsScope := map[string]string{}
+	nsScope := map[string]string{
+		lexicon.PrefixXML: lexicon.NamespaceXML,
+	}
 	// nsScopeCounts tracks how many namespace declarations were pushed
 	// per element level so they can be popped on EndElement.
 	var nsScopeCounts []int

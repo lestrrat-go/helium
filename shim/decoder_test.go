@@ -23,6 +23,19 @@ func (b *byteOnlyReader) Read(p []byte) (int, error) { return b.r.Read(p) }
 func (b *byteOnlyReader) ReadByte() (byte, error)    { return b.r.ReadByte() }
 
 func TestDecoder(t *testing.T) {
+	t.Run("implicit-xml-namespace-on-attribute", func(t *testing.T) {
+		dec := shim.NewDecoder(t.Context(), strings.NewReader(`<root xml:lang="en"/>`))
+		defer dec.Close()
+
+		tok, err := dec.Token()
+		require.NoError(t, err)
+		start, ok := tok.(shim.StartElement)
+		require.True(t, ok)
+		require.Len(t, start.Attr, 1)
+		require.Equal(t, "http://www.w3.org/XML/1998/namespace", start.Attr[0].Name.Space)
+		require.Equal(t, "lang", start.Attr[0].Name.Local)
+	})
+
 	t.Run("charset-reader-byte-reader", func(t *testing.T) {
 		input := `<?xml version="1.0" encoding="latin1"?><root>hi</root>`
 		dec := shim.NewDecoder(context.Background(), strings.NewReader(input))
