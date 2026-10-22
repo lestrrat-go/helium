@@ -343,6 +343,31 @@ func TestWithErrorHandler(t *testing.T) {
 	})
 }
 
+func TestRuleContextsAcceptXPathNodeKinds(t *testing.T) {
+	t.Parallel()
+	p := helium.NewParser()
+	instance, err := p.Parse(t.Context(), []byte(`<root>text<!--comment--><?target data?></root>`))
+	require.NoError(t, err)
+
+	for _, contextExpr := range []string{"/", "//text()", "//comment()", "//processing-instruction()"} {
+		t.Run(contextExpr, func(t *testing.T) {
+			t.Parallel()
+			schemaXML := `<schema xmlns="http://purl.oclc.org/dsdl/schematron"><pattern><rule context="` + contextExpr + `"><assert test="false()">failed</assert></rule></pattern></schema>`
+			schemaDoc, err := p.Parse(t.Context(), []byte(schemaXML))
+			require.NoError(t, err)
+			schema, err := schematron.NewCompiler().Compile(t.Context(), schemaDoc)
+			require.NoError(t, err)
+
+			var collected []*schematron.ValidationError
+			handler := validationErrorCollector{errors: &collected}
+			err = schematron.NewValidator(schema).ErrorHandler(handler).Validate(t.Context(), instance)
+			require.ErrorIs(t, err, schematron.ErrValidationFailed)
+			require.Len(t, collected, 1)
+			require.Equal(t, "failed", collected[0].Message)
+		})
+	}
+}
+
 // TestErroringTestXPath ensures that an assertion/report test whose XPath
 // cannot be evaluated is not silently treated as satisfied. A broken test
 // must surface the XPath error and, for an assert, fail validation.

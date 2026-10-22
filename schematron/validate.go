@@ -39,15 +39,8 @@ func validateDocument(ctx context.Context, doc *helium.Document, schema *Schema,
 				continue
 			}
 			// A rule context that selects anything other than nodes claims
-			// no node at all.
+			// no node at all. Every XPath node kind is a valid rule context.
 			for _, node := range result.nodeSet() {
-				// A rule context may resolve to element or attribute
-				// nodes (e.g. context="@id" becomes //@id). Other node
-				// types are not valid rule contexts.
-				if node.Type() != helium.ElementNode && node.Type() != helium.AttributeNode {
-					continue
-				}
-
 				// Skip nodes already matched by an earlier rule in this
 				// pattern (first-match-only semantics).
 				if _, ok := matched[node]; ok {

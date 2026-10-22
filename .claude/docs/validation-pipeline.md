@@ -2371,6 +2371,8 @@ guarding against a nil-deref panic.
 2. For each pattern/rule: evaluate `contextExpr` against document root → node set
    - If the context XPath **errors at evaluation**, surface an `XPath error : ...` diagnostic and mark the document
      invalid (the rule's assertions can't be checked, so it is not silently skipped)
+   - Every selected XPath node kind (document, element, attribute, text, comment, and processing instruction) is
+     processed as a rule context
    - **First-match-only (ISO Schematron):** within a pattern, each node is processed by only the FIRST rule
      whose context matches it. A per-pattern `map[helium.Node]bool` (reset each pattern) skips nodes already
      claimed by an earlier rule. Scope is per pattern, so a later pattern still fires for the same node.
