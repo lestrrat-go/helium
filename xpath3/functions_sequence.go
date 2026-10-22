@@ -647,7 +647,7 @@ func fnSort(ctx context.Context, args []Sequence) (Sequence, error) {
 	// Compute sort keys
 	type sortPair struct {
 		item Item
-		key  Sequence
+		key  []AtomicValue
 	}
 	inputItems, err := appendBoundedSeq(ctx, ec, nil, input, maxNodes)
 	if err != nil {
@@ -663,19 +663,18 @@ func fnSort(ctx context.Context, args []Sequence) (Sequence, error) {
 			if err != nil {
 				return nil, err
 			}
-			pairs[i] = sortPair{item: item, key: k}
+			atoms, err := atomizeTypedValue(ctx, k)
+			if err != nil {
+				return nil, err
+			}
+			pairs[i] = sortPair{item: item, key: atoms}
 		} else {
 			// Default key: fn:data() semantics (atomize, flattening arrays)
-			atoms, err := AtomizeSequence(ItemSlice{item})
+			atoms, err := atomizeTypedValue(ctx, ItemSlice{item})
 			if err != nil {
-				pairs[i] = sortPair{item: item, key: nil}
-			} else {
-				key := make(ItemSlice, len(atoms))
-				for k, a := range atoms {
-					key[k] = a
-				}
-				pairs[i] = sortPair{item: item, key: key}
+				return nil, err
 			}
+			pairs[i] = sortPair{item: item, key: atoms}
 		}
 	}
 
@@ -691,17 +690,14 @@ func fnSort(ctx context.Context, args []Sequence) (Sequence, error) {
 		}
 		ki := pairs[i].key
 		kj := pairs[j].key
-		minLen := min(seqLen(ki), seqLen(kj))
+		minLen := min(len(ki), len(kj))
 		for idx := range minLen {
 			if err := fnCountOp(ctx, ec); err != nil {
 				sortErr = err
 				return false
 			}
-			ai, err1 := AtomizeItem(ki.Get(idx))
-			aj, err2 := AtomizeItem(kj.Get(idx))
-			if err1 != nil || err2 != nil {
-				return false
-			}
+			ai := ki[idx]
+			aj := kj[idx]
 			cmp, err := valueCompareThreeWay(ai, aj, coll)
 			if err != nil {
 				sortErr = err
@@ -716,7 +712,7 @@ func fnSort(ctx context.Context, args []Sequence) (Sequence, error) {
 			// Equal — continue to next key component
 		}
 		// All compared items equal; shorter key comes first
-		return seqLen(ki) < seqLen(kj)
+		return len(ki) < len(kj)
 	})
 	if sortErr != nil {
 		return nil, sortErr
