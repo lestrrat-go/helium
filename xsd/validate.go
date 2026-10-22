@@ -890,6 +890,9 @@ func (td *TypeDef) ValidateElementAnnotated(ctx context.Context, elem *helium.El
 }
 
 func validateDocument(ctx context.Context, doc *helium.Document, schema *Schema, cfg *validateConfig, handler helium.ErrorHandler) bool {
+	if ctx.Err() != nil {
+		return false
+	}
 	filename := cfg.label
 	if filename == "" {
 		filename = doc.URL()
@@ -924,9 +927,15 @@ func validateDocument(ctx context.Context, doc *helium.Document, schema *Schema,
 	// validating a root recurses through its whole subtree, so only the
 	// document-level elements are visited here, in document order.
 	for elem := range helium.ChildElements(doc) {
+		if ctx.Err() != nil {
+			return false
+		}
 		if err := vc.validateRootElement(ctx, elem); err != nil {
 			valid = false
 		}
+	}
+	if ctx.Err() != nil {
+		return false
 	}
 
 	// Identity constraints (xs:key, xs:keyref, xs:unique). This walk covers the
@@ -937,6 +946,9 @@ func validateDocument(ctx context.Context, doc *helium.Document, schema *Schema,
 	idc := &idcVisitor{vc: vc, valid: true}
 	if err := vc.walkOccurrences(ctx, vc.idcDocument(doc), idc); err != nil || !idc.valid {
 		valid = false
+	}
+	if ctx.Err() != nil {
+		return false
 	}
 
 	// Document-wide xs:ID / xs:IDREF / xs:IDREFS validation (cvc-id,
@@ -1003,6 +1015,9 @@ func (v *idcVisitor) visitOccurrence(ctx context.Context, occ elementOccurrence)
 }
 
 func (vc *validationContext) validateRootElement(ctx context.Context, elem *helium.Element) error {
+	if err := ctx.Err(); err != nil {
+		return err
+	}
 	local := elem.LocalName()
 	ns := elem.URI()
 	// Match on the element's full expanded name. An element with a non-empty
@@ -1104,6 +1119,9 @@ func (vc *validationContext) validateUndeclaredElementWithType(ctx context.Conte
 }
 
 func (vc *validationContext) validateElementContent(ctx context.Context, elem *helium.Element, edecl *ElementDecl, td *TypeDef) error {
+	if err := ctx.Err(); err != nil {
+		return err
+	}
 	if err := vc.rejectMissingTypeRef(ctx, elem, td); err != nil {
 		return err
 	}

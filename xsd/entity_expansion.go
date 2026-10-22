@@ -178,6 +178,9 @@ func (vc *validationContext) walkOccurrences(ctx context.Context, doc *helium.Do
 func (w *occurrenceWalk) children(ctx context.Context, parent helium.Node, host *helium.Element, hostIndex int) error {
 	var guard nodeCycleGuard
 	for child := parent.FirstChild(); child != nil; child = ownedNext(parent, child) {
+		if err := ctx.Err(); err != nil {
+			return err
+		}
 		if guard.step(child) {
 			return helium.ErrWalkCycle
 		}
@@ -204,6 +207,9 @@ func (w *occurrenceWalk) children(ctx context.Context, parent helium.Node, host 
 
 // element visits the occurrence of elem, then the occurrences below it.
 func (w *occurrenceWalk) element(ctx context.Context, elem *helium.Element, parentIndex int) error {
+	if err := ctx.Err(); err != nil {
+		return err
+	}
 	if _, cyclic := w.onPath[elem]; cyclic {
 		return helium.ErrWalkCycle
 	}

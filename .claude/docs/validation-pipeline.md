@@ -5,6 +5,12 @@ compile→validate pattern.
 
 ## XSD
 
+Compilation and validation return `ctx.Err()` when canceled. Compilation checks
+the context at entry, during schema-tree walks, between major compile phases, and
+for each top-level schema component. Validation checks before schema-hint loading, at recursive element
+validation boundaries and during document-wide occurrence walks; cancellation
+stops later passes and is returned by `Validator.Validate`.
+
 Files: `xsd/xsd.go` (API), `compile*.go` + `read_*.go` + `link_refs.go` + `restriction_particle.go` +
 `check_*.go` (compile/read/resolve/constraint pipeline), `validate.go` + `validate_elem.go` (content
 validation), `validate_idc.go` (IDC), `simplevalue_core.go` + `simplevalue_facets.go` (simple-value

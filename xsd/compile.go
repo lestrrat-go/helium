@@ -629,6 +629,9 @@ func defaultSchemaParser() helium.Parser {
 }
 
 func compileSchema(ctx context.Context, doc *helium.Document, baseDir string, cfg *compileConfig) (*Schema, error) {
+	if err := ctx.Err(); err != nil {
+		return nil, err
+	}
 	root := findDocumentElement(doc)
 	if root == nil {
 		return nil, fmt.Errorf("xsd: empty document")
@@ -788,7 +791,11 @@ func compileSchema(ctx context.Context, doc *helium.Document, baseDir string, cf
 	// on, say, a bogus blockDefault it would never use. A MALFORMED 1.1 vc value on
 	// the excluded root is still a schema error (reported during the pre-pass), so
 	// surface it instead of swallowing it behind the empty-schema short-circuit.
-	if c.applyConditionalInclusion(ctx, root) {
+	excluded := c.applyConditionalInclusion(ctx, root)
+	if err := ctx.Err(); err != nil {
+		return nil, err
+	}
+	if excluded {
 		if c.errorCount > 0 {
 			return nil, ErrCompilationFailed
 		}
@@ -818,6 +825,9 @@ func compileSchema(ctx context.Context, doc *helium.Document, baseDir string, cf
 	c.checkIDConstraintPlacement(ctx, root)
 	c.checkNotations(ctx, root)
 	c.checkAnnotations(ctx, root)
+	if err := ctx.Err(); err != nil {
+		return nil, err
+	}
 
 	// Parse blockDefault attribute.
 	if v := getAttr(root, attrBlockDefault); v != "" {
@@ -875,11 +885,17 @@ func compileSchema(ctx context.Context, doc *helium.Document, baseDir string, cf
 	if err := c.parseSchemaChildren(ctx, root); err != nil {
 		return nil, err
 	}
+	if err := ctx.Err(); err != nil {
+		return nil, err
+	}
 
 	// Process includes after parsing the main schema's declarations.
 	// This matches libxml2's processing order where includes are merged
 	// after the including schema's own declarations are registered.
 	if err := c.processIncludes(ctx, root); err != nil {
+		return nil, err
+	}
+	if err := ctx.Err(); err != nil {
 		return nil, err
 	}
 
@@ -897,6 +913,9 @@ func compileSchema(ctx context.Context, doc *helium.Document, baseDir string, cf
 	// runs INSIDE resolveRefs, after group-ref expansion but before the
 	// restriction-derivation checks, so those checks see resolved SiblingNames.)
 	c.resolveRefs(ctx)
+	if err := ctx.Err(); err != nil {
+		return nil, err
+	}
 
 	// Reject circular simple-type definitions (a union/list/restriction that
 	// reaches itself) BEFORE any check that walks the variety/base chain. A
@@ -918,6 +937,9 @@ func compileSchema(ctx context.Context, doc *helium.Document, baseDir string, cf
 
 	// Check facet consistency after refs are resolved (base types are available).
 	c.checkFacetConsistency(ctx)
+	if err := ctx.Err(); err != nil {
+		return nil, err
+	}
 
 	// Validate QName/NOTATION enumeration literal prefixes (and the NOTATION
 	// no-enumeration rule) now that base types are resolved.
@@ -943,6 +965,9 @@ func compileSchema(ctx context.Context, doc *helium.Document, baseDir string, cf
 	// XSD 1.1: each conditional-type-assignment alternative's type must be validly
 	// substitutable for the element's declared type. Runs after type refs resolve.
 	c.checkAltSubstitutability(ctx)
+	if err := ctx.Err(); err != nil {
+		return nil, err
+	}
 
 	// Detect circular substitution-group references. The membership map itself was
 	// already built by buildSubstGroups (before resolveRefs) so UPA could see it;
@@ -986,12 +1011,18 @@ func compileSchema(ctx context.Context, doc *helium.Document, baseDir string, cf
 	// constraint's selector/fields/refer into the referencing constraint) before
 	// the keyref/@refer check, since a ref'd keyref inherits its target's @refer.
 	c.resolveConstraintRefs(ctx)
+	if err := ctx.Err(); err != nil {
+		return nil, err
+	}
 
 	// Resolve every xs:keyref/@refer against the schema-wide registry of
 	// key/unique constraints. An unresolved refer must be a fatal schema error:
 	// otherwise the keyref is silently skipped at validation time and referential
 	// integrity is never enforced.
 	c.checkKeyRefRefers(ctx)
+	if err := ctx.Err(); err != nil {
+		return nil, err
+	}
 
 	// Enforce the XSD 1.0 Schema Component Constraint that a complex type must not
 	// have more than one attribute use whose type is or is derived from xs:ID
@@ -1007,6 +1038,9 @@ func compileSchema(ctx context.Context, doc *helium.Document, baseDir string, cf
 	// failure as ErrCompilationFailed (mirrors Validate's ErrValidationFailed).
 	if c.errorCount > 0 {
 		return nil, ErrCompilationFailed
+	}
+	if err := ctx.Err(); err != nil {
+		return nil, err
 	}
 
 	c.schema.buildSubstClosures()
@@ -1391,6 +1425,9 @@ func (w *idcWalker) walkGroup(mg *ModelGroup) {
 // parseSchemaChildren parses the children of an xs:schema element.
 func (c *compiler) parseSchemaChildren(ctx context.Context, root *helium.Element) error {
 	for child := range helium.Children(root) {
+		if err := ctx.Err(); err != nil {
+			return err
+		}
 		if child.Type() != helium.ElementNode {
 			continue
 		}

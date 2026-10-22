@@ -72,13 +72,22 @@ func (vc *validationContext) validateIDIDREF(ctx context.Context, doc *helium.Do
 	col := &idCollector{ids: make(map[string]int), valid: true}
 
 	if err := vc.walkOccurrences(ctx, doc, idrefVisitor{vc: vc, col: col}); err != nil {
+		if ctx.Err() != nil {
+			return false
+		}
 		// A tree cycle (ErrWalkCycle) leaves the walk partial; the document
 		// cannot be certified valid.
 		col.valid = false
 	}
+	if ctx.Err() != nil {
+		return false
+	}
 
 	// Resolve all collected references now that every ID value is known.
 	for _, r := range col.refs {
+		if ctx.Err() != nil {
+			return false
+		}
 		if _, ok := col.ids[r.value]; ok {
 			continue
 		}

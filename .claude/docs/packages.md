@@ -1027,7 +1027,7 @@ Toggle" section in CLAUDE.md for what is implemented in 1.1.
     is a local path, names use `filepath.Join` and may be absolute / OS-style (rejected by `fs.ValidPath` FSes
     like `os.DirFS`/`fstest.MapFS`)
   - `Compile(ctx, *Document) → (*Schema, error)` / `CompileFile(ctx, path) → (*Schema, error)` — terminal methods;
-    return `(nil, ErrCompilationFailed)` on fatal schema diagnostics
+    return `(nil, ErrCompilationFailed)` on fatal schema diagnostics and `ctx.Err()` when canceled
 - **NewValidator(schema) → Validator** — create fluent builder for validation
   - `Label(name)`, `ErrorHandler(h)`, `Annotations(*TypeAnnotations)`, `NilledElements(*NilledElements)`,
     `IDNodes(*IDNodes)` — builder methods. `IDNodes` collects the PSVI is-id nodes (XDM 3.1): every
@@ -1036,7 +1036,7 @@ Toggle" section in CLAUDE.md for what is implemented in 1.1.
     union member is not is-id. Version-independent and runs regardless of `SkipDatatypeIntegrityChecks` (it
     observes a per-node property, it does not enforce document ID uniqueness). Feeds
     `xpath3.Evaluator.IDNodes` for `fn:id`/`fn:element-with-id`
-  - `Validate(ctx, *Document) → error` — terminal method
+  - `Validate(ctx, *Document) → error` — terminal method; returns `ctx.Err()` when canceled
 - **(*TypeDef).Validate(ctx, value, nsMap) → error** — validate a lexical value against a simple type; nsMap
   (prefix→URI) may be nil
 - **(*TypeDef).ValidateElement(ctx, elem, schema) → error** — validate an element's content against a type
