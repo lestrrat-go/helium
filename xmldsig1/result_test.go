@@ -61,9 +61,10 @@ func TestVerifyResult(t *testing.T) {
 		require.NoError(t, err)
 
 		root := doc.DocumentElement()
-		require.Equal(t, root, res.SignedElement(""))
+		require.Nil(t, res.SignedElement(""), "enveloped transform excludes the Signature subtree")
 		require.Nil(t, res.SignedElement("#nope"))
-		require.True(t, res.Covers(root))
+		require.Same(t, root, res.References[0].Element, "Element retains the resolved target")
+		require.False(t, res.Covers(root))
 
 		other, err := doc.CreateElement("other")
 		require.NoError(t, err)
@@ -75,9 +76,8 @@ func TestVerifyResult(t *testing.T) {
 		require.False(t, nilRes.Covers(root))
 	})
 
-	// exposes signed element asserts that Verify returns the resolved element
-	// pointer for each Reference, so the caller can compare pointer equality
-	// against the element they are about to consume.
+	// resolved element retains the target pointer even when transforms prevent
+	// whole-element coverage from being claimed.
 	t.Run("exposes signed element", func(t *testing.T) {
 		xml := `<root><data Id="payload">secret</data></root>`
 		key := generateRSAKey(t)

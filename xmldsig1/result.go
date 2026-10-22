@@ -41,6 +41,11 @@ type VerifiedReference struct {
 	// Verifier.ValidateManifests(true) is set, that Manifest's inner references
 	// are reported in VerifyResult.Manifests.
 	Type string
+
+	// CoversElement reports whether the verified Reference covers the complete
+	// element content for the purpose of Covers and SignedElement. It is false
+	// when the Reference uses a transform that can filter or replace content.
+	CoversElement bool
 }
 
 // ManifestResult reports the outcome of validating the inner ds:Reference
@@ -118,11 +123,9 @@ type VerifyResult struct {
 }
 
 // SignedElement returns the resolved element for the Reference with the
-// given URI, or nil if no such Reference was verified. This is the
-// preferred way to confirm an element was covered by the signature before
-// consuming it. An External reference is skipped: it resolves to bytes outside
-// the document, not an element, so it can never satisfy an in-document
-// element lookup.
+// given URI only when its verified transforms cover the complete element
+// content. It returns nil when no such Reference was verified, or when its
+// transforms can filter or replace content. An External reference is skipped.
 func (r *VerifyResult) SignedElement(uri string) *helium.Element {
 	if r == nil {
 		return nil
@@ -131,16 +134,17 @@ func (r *VerifyResult) SignedElement(uri string) *helium.Element {
 		if ref.External {
 			continue
 		}
-		if ref.URI == uri {
+		if ref.URI == uri && ref.CoversElement {
 			return ref.Element
 		}
 	}
 	return nil
 }
 
-// Covers reports whether elem was covered by any verified Reference. An External
-// reference never counts: it covers content outside the document, so it cannot
-// attest that an in-document *Element was signed.
+// Covers reports whether elem's complete content was covered by any verified
+// Reference. References with transforms that can filter or replace content do
+// not count. An External reference never counts because it covers content
+// outside the document.
 func (r *VerifyResult) Covers(elem *helium.Element) bool {
 	if r == nil || elem == nil {
 		return false
@@ -149,7 +153,7 @@ func (r *VerifyResult) Covers(elem *helium.Element) bool {
 		if ref.External {
 			continue
 		}
-		if ref.Element == elem {
+		if ref.Element == elem && ref.CoversElement {
 			return true
 		}
 	}

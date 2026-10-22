@@ -1607,7 +1607,10 @@ XML Digital Signatures 1.1 (W3C xmldsig-core1). Sign and verify XML documents.
   (`helium.NewParser()`: XXE blocked, no FS, no network). Enveloped transforms are invalid on external input.
   Sign and verify share the same executor and conversions; signing supports Base64 but rejects XPath/XSLT
   because it cannot emit their parameters. `VerifiedReference.External` marks resolver-satisfied references,
-  and coverage helpers never attribute them to document elements. `FSReferenceResolver(fsys)` serves only
+  and coverage helpers never attribute them to document elements. `VerifiedReference.CoversElement` is false for
+  Manifest references and transforms that can filter or replace content (enveloped-signature, XPath, XSLT, and
+  Base64). `VerifyResult.Covers` and `SignedElement` report only whole-element coverage when that flag is true;
+  `VerifiedReference.Element` still exposes the resolved target. `FSReferenceResolver(fsys)` serves only
   contained slash paths, rejects schemes/fragments/escapes, performs no network access, and applies the 64 MiB
   cap; `LimitReferenceResolver` composes a lower per-resource cap around the built-in resolver or any custom
   resolver, applying the cap while the built-in FS resolver reads and checking arbitrary custom results after
