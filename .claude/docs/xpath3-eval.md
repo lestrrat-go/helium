@@ -478,8 +478,11 @@ and the default xpath3 behavior is unchanged.
   document root's registration order, which orders nodes from different trees. A document can be registered
   without being indexed (`ReserveDocument`, used by `OrderStepResult` when a location step needs no sort, and by the `//` fusion); the
   first lookup that needs a position in it indexes it under the reserved order
-- Inline functions and named function refs snapshot the dynamic context they close over, so later focus rebinding does
-  not change captured behavior
+- Inline functions and named function refs preserve their captured focus, variables, and static configuration
+- Retained named refs and `function-lookup` items use the invoking evaluation's operation counter, operation limit,
+  node-set limit, resource-byte limit, recursion depth, document-order cache, and document cache. Their invocation
+  context provides cancellation. Direct invocation outside an evaluation gets fresh counters and caches with no
+  explicit limits.
 
 ## Safety Limits
 

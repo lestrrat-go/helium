@@ -668,4 +668,7 @@ Inline functions, named refs, partial applications → all produce `FunctionItem
 
 `FunctionItem.invoke` is a closure: `func(ctx context.Context, args []Sequence) (Sequence, error)`.
 
-Evaluator calls uniformly regardless of origin.
+Evaluator calls uniformly regardless of origin. Named function references and
+`function-lookup` items preserve captured focus and static configuration while
+using the caller's operation accounting, node-set and resource limits, caches, and
+cancellation context. Direct calls outside an evaluation use fresh bookkeeping.
