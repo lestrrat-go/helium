@@ -260,11 +260,16 @@ func (c Compiler) closeHandler() {
 	}
 }
 
-// Compile compiles an XSD document into a Schema.
+// Compile compiles an XSD document into a Schema. It returns ctx.Err() when the
+// context is canceled before or during compilation.
 // (libxml2: xmlSchemaNewParserCtxt + xmlSchemaParse)
 func (c Compiler) Compile(ctx context.Context, doc *helium.Document) (*Schema, error) { //nolint:contextcheck
 	if ctx == nil {
 		ctx = context.Background()
+	}
+	defer c.closeHandler()
+	if err := ctx.Err(); err != nil {
+		return nil, err
 	}
 	cfg := c.cfg
 	if cfg == nil {
@@ -286,7 +291,6 @@ func (c Compiler) Compile(ctx context.Context, doc *helium.Document) (*Schema, e
 		cfgWithRoot.rootKey = rootKey
 	}
 	schema, err := compileSchema(ctx, doc, cfgWithRoot.baseDir, &cfgWithRoot)
-	c.closeHandler()
 	return schema, err
 }
 
@@ -295,9 +299,16 @@ func (c Compiler) CompileFile(ctx context.Context, path string) (*Schema, error)
 	if ctx == nil {
 		ctx = context.Background()
 	}
+	defer c.closeHandler()
+	if err := ctx.Err(); err != nil {
+		return nil, err
+	}
 	data, err := os.ReadFile(path) //nolint:gosec // path is caller-supplied schema file
 	if err != nil {
 		return nil, fmt.Errorf("xsd: failed to read %q: %w", path, err)
+	}
+	if err := ctx.Err(); err != nil {
+		return nil, err
 	}
 	cfg := c.cfg
 	if cfg == nil {
@@ -327,7 +338,6 @@ func (c Compiler) CompileFile(ctx context.Context, path string) (*Schema, error)
 		cfgWithRoot.rootKey = rootKey
 	}
 	schema, compileErr := compileSchema(ctx, doc, baseDir, &cfgWithRoot)
-	c.closeHandler()
 	return schema, compileErr
 }
 
@@ -435,6 +445,7 @@ func (v Validator) closeHandler() {
 // ErrNilDocument when doc is nil, and ErrValidationFailed when the document
 // is invalid; it returns nil when the document is valid. Individual
 // validation errors are delivered to the ErrorHandler if one is configured.
+// It returns ctx.Err() when the context is canceled before or during validation.
 // A nil ctx is normalized to context.Background().
 // (libxml2: xmlSchemaValidateDoc)
 func (v Validator) Validate(ctx context.Context, doc *helium.Document) error { //nolint:contextcheck
@@ -463,9 +474,18 @@ func (v Validator) Validate(ctx context.Context, doc *helium.Document) error { /
 	if doc == nil {
 		return ErrNilDocument
 	}
+	if err := ctx.Err(); err != nil {
+		return err
+	}
 
 	schema := schemaWithInstanceHints(ctx, v.schema, doc)
+	if err := ctx.Err(); err != nil {
+		return err
+	}
 	valid := validateDocument(ctx, doc, schema, cfg, handler)
+	if err := ctx.Err(); err != nil {
+		return err
+	}
 
 	if valid {
 		return nil

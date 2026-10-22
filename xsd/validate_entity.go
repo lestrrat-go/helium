@@ -29,9 +29,15 @@ import (
 func (vc *validationContext) validateEntities(ctx context.Context, doc *helium.Document) bool {
 	v := &entityValueVisitor{vc: vc, doc: doc, valid: true}
 	if err := vc.walkOccurrences(ctx, doc, v); err != nil {
+		if ctx.Err() != nil {
+			return false
+		}
 		// A tree cycle (ErrWalkCycle) leaves the walk partial; the document
 		// cannot be certified valid.
 		v.valid = false
+	}
+	if ctx.Err() != nil {
+		return false
 	}
 	return v.valid
 }

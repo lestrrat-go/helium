@@ -24,6 +24,9 @@ func (c *compiler) checkSchemaComponentIDs(ctx context.Context, root *helium.Ele
 }
 
 func (c *compiler) walkComponentIDs(ctx context.Context, elem *helium.Element, seen map[string]struct{}) {
+	if ctx.Err() != nil {
+		return
+	}
 	// The `id` attribute is an unqualified attribute on an XSD-namespace
 	// element. Foreign-namespace elements (e.g. inside xs:appinfo) are not
 	// schema components, so their `id` attributes are not xs:ID and are ignored.
@@ -52,6 +55,9 @@ func (c *compiler) walkComponentIDs(ctx context.Context, elem *helium.Element, s
 	}
 
 	for child := range helium.Children(elem) {
+		if ctx.Err() != nil {
+			return
+		}
 		ce, ok := child.(*helium.Element)
 		if !ok {
 			continue

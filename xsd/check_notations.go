@@ -43,6 +43,9 @@ func (c *compiler) checkNotations(ctx context.Context, root *helium.Element) {
 // which may legitimately embed XSD-namespace elements that are application data,
 // not schema components.
 func (c *compiler) walkNotations(ctx context.Context, elem *helium.Element, parentLocal string, seen map[string]struct{}) {
+	if ctx.Err() != nil {
+		return
+	}
 	if elem.URI() == lexicon.NamespaceXSD && elem.LocalName() == elemNotation {
 		c.checkNotationDecl(ctx, elem, parentLocal, seen)
 	}
@@ -52,6 +55,9 @@ func (c *compiler) walkNotations(ctx context.Context, elem *helium.Element, pare
 		childParent = elem.LocalName()
 	}
 	for child := range helium.Children(elem) {
+		if ctx.Err() != nil {
+			return
+		}
 		ce, ok := child.(*helium.Element)
 		if !ok {
 			continue

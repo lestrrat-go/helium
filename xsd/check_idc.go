@@ -38,6 +38,9 @@ func (c *compiler) checkIDConstraintPlacement(ctx context.Context, root *helium.
 // name of each element's parent so the placement of identity-constraint elements
 // (and their selector/field children) can be checked against the parent kind.
 func (c *compiler) walkIDConstraintPlacement(ctx context.Context, elem *helium.Element, parentLocal string) {
+	if ctx.Err() != nil {
+		return
+	}
 	if elem.URI() == lexicon.NamespaceXSD {
 		switch elem.LocalName() {
 		case elemUnique, elemKey, elemKeyRef:
@@ -61,6 +64,9 @@ func (c *compiler) walkIDConstraintPlacement(ctx context.Context, elem *helium.E
 		childParent = elem.LocalName()
 	}
 	for child := range helium.Children(elem) {
+		if ctx.Err() != nil {
+			return
+		}
 		ce, ok := child.(*helium.Element)
 		if !ok {
 			continue

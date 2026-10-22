@@ -42,6 +42,9 @@ func (c *compiler) checkAnnotations(ctx context.Context, root *helium.Element) {
 }
 
 func (c *compiler) walkAnnotations(ctx context.Context, elem *helium.Element) {
+	if ctx.Err() != nil {
+		return
+	}
 	if elem.URI() == lexicon.NamespaceXSD {
 		local := elem.LocalName()
 		switch local {
@@ -57,6 +60,9 @@ func (c *compiler) walkAnnotations(ctx context.Context, elem *helium.Element) {
 	}
 
 	for child := range helium.Children(elem) {
+		if ctx.Err() != nil {
+			return
+		}
 		ce, ok := child.(*helium.Element)
 		if !ok {
 			continue
