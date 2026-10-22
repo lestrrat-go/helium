@@ -8,9 +8,9 @@ import (
 )
 
 // TestNewEnvelopedReferenceByID signs a nested element by its id and asserts
-// the signature covers that nested element, NOT the document root. This is the
-// SAML element-signature shape (URI="#AssertionID") that NewEnvelopedReference
-// (empty URI, whole-document coverage) cannot express.
+// the Reference resolves to that nested element, NOT the document root. The
+// enveloped transform excludes the Signature subtree, so it does not claim
+// whole-element coverage.
 func TestNewEnvelopedReferenceByID(t *testing.T) {
 	// A Response envelope carrying a nested Assertion. Only the Assertion is
 	// signed, targeted by its ID.
@@ -32,15 +32,15 @@ func TestNewEnvelopedReferenceByID(t *testing.T) {
 	result, err := verifier.Verify(t.Context(), doc)
 	require.NoError(t, err)
 
-	require.True(t, result.Covers(assertion), "signature must cover the nested Assertion")
+	require.False(t, result.Covers(assertion), "enveloped transform excludes part of the Assertion")
 	require.False(t, result.Covers(root), "signature must NOT cover the document root")
-	require.Equal(t, assertion, result.SignedElement("#_assertion1"))
+	require.Nil(t, result.SignedElement("#_assertion1"))
+	require.Same(t, assertion, result.References[0].Element)
 }
 
-// TestNewEnvelopedReferenceCoversDocumentRoot pins the whole-document coverage
-// of NewEnvelopedReference (empty URI): even when the Signature is inserted
-// into a nested parent, the reference resolves to the document element.
-func TestNewEnvelopedReferenceCoversDocumentRoot(t *testing.T) {
+// TestNewEnvelopedReferenceExposesDocumentRoot pins the resolved target for an
+// empty-URI Reference while declining whole-element coverage after filtering.
+func TestNewEnvelopedReferenceExposesDocumentRoot(t *testing.T) {
 	key := generateRSAKey(t)
 	doc := mustParseXML(t, samlAssertion)
 
@@ -58,6 +58,7 @@ func TestNewEnvelopedReferenceCoversDocumentRoot(t *testing.T) {
 	result, err := verifier.Verify(t.Context(), doc)
 	require.NoError(t, err)
 
-	require.True(t, result.Covers(root), "empty-URI reference must cover the document root")
-	require.Equal(t, root, result.SignedElement(""))
+	require.False(t, result.Covers(root), "enveloped transform excludes the Signature subtree")
+	require.Nil(t, result.SignedElement(""))
+	require.Same(t, root, result.References[0].Element)
 }

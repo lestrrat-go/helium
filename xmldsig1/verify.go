@@ -264,6 +264,7 @@ func verifySignature(ctx context.Context, cfg *verifierConfig, doc *helium.Docum
 			External:        external,
 			DigestAlgorithm: ref.digestAlgorithm,
 			Type:            ref.refType,
+			CoversElement:   referenceCoversElement(ref),
 		})
 	}
 
@@ -296,6 +297,29 @@ func verifySignature(ctx context.Context, cfg *verifierConfig, doc *helium.Docum
 	}
 
 	return result, nil
+}
+
+// referenceCoversElement reports whether a verified same-document Reference
+// digests the resolved element without a transform that can remove or replace
+// arbitrary content. Enveloped-signature also filters nodes, so it cannot
+// establish whole-element coverage.
+func referenceCoversElement(ref parsedReference) bool {
+	if ref.refType == TypeManifest {
+		return false
+	}
+	if _, _, _, sameDocument := referenceURIForm(ref.uri); !sameDocument {
+		return false
+	}
+	for _, transform := range ref.transforms {
+		switch transform.algorithm {
+		case C14N10, C14N10Comments, ExcC14N10, ExcC14N10Comments, C14N11URI, C14N11Comments:
+		case TransformEnvelopedSignature, TransformXPath, TransformXSLT, TransformBase64:
+			return false
+		default:
+			return false
+		}
+	}
+	return true
 }
 
 func verifyReference(ctx context.Context, cfg *verifierConfig, doc *helium.Document, sigElem *helium.Element, ref parsedReference) (*helium.Element, bool, error) {

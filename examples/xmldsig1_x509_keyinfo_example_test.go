@@ -72,11 +72,11 @@ func Example_xmldsig1_x509_keyinfo() {
 		return
 	}
 	if !result.Covers(expectedElement) {
-		fmt.Println("verify error: signature does not cover the expected assertion")
+		fmt.Println("signature valid; enveloped transform does not establish full assertion coverage")
 		return
 	}
 	fmt.Println("signature valid and assertion covered")
 	// Output:
 	// true
-	// signature valid and assertion covered
+	// signature valid; enveloped transform does not establish full assertion coverage
 }

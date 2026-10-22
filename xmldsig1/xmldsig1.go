@@ -625,11 +625,11 @@ func (v Verifier) LenientKeyInfo(lenient bool) Verifier {
 // the function returns ErrAmbiguousSignature and the caller must use
 // VerifyElement to disambiguate.
 //
-// On success the returned VerifyResult exposes the set of elements actually
-// covered by the signature so callers can confirm — by pointer identity —
-// that the element they intend to consume was signed. This is the primary
-// defense against XML Signature Wrapping (XSW) attacks at the application
-// layer.
+// On success the returned VerifyResult exposes each Reference's resolved
+// element. Covers and SignedElement report only References whose transforms are
+// known to preserve the complete element content. A filtered or replacing
+// transform does not establish whole-element coverage. Applications should
+// check the exact element they intend to consume by pointer identity.
 //
 // Same-document reference resolution (ds:Reference URI="#id") locates the
 // target element by its ID attribute. An attribute is recognized as an ID
