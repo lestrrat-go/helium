@@ -4,19 +4,11 @@ import (
 	"context"
 	"math/big"
 	"math/rand"
-	"os"
 	"sort"
-	"strings"
 	"time"
 
 	"github.com/lestrrat-go/helium/internal/lexicon"
 )
-
-var qt3EnvironmentVariables = map[string]string{
-	"QTTEST":      "42",
-	"QTTEST2":     "other",
-	"QTTESTEMPTY": "",
-}
 
 func init() {
 	registerFn("static-base-uri", 0, 0, fnStaticBaseURI)
@@ -54,24 +46,13 @@ func fnDefaultCollation(ctx context.Context, _ []Sequence) (Sequence, error) {
 	}), nil
 }
 
-func fnAvailableEnvVars(_ context.Context, _ []Sequence) (Sequence, error) {
-	names := make(map[string]struct{}, len(qt3EnvironmentVariables)+len(os.Environ()))
-	for name := range qt3EnvironmentVariables {
-		names[name] = struct{}{}
+func fnAvailableEnvVars(ctx context.Context, _ []Sequence) (Sequence, error) {
+	ec := getFnContext(ctx)
+	if ec == nil || len(ec.environmentVariables) == 0 {
+		return validNilSequence, nil
 	}
-	for _, env := range os.Environ() {
-		if eq := len(env); eq > 0 {
-			for i := range len(env) {
-				if env[i] == '=' {
-					names[env[:i]] = struct{}{}
-					break
-				}
-			}
-		}
-	}
-
-	keys := make([]string, 0, len(names))
-	for name := range names {
+	keys := make([]string, 0, len(ec.environmentVariables))
+	for name := range ec.environmentVariables {
 		keys = append(keys, name)
 	}
 	sort.Strings(keys)
@@ -88,24 +69,15 @@ func fnEnvironmentVariable(ctx context.Context, args []Sequence) (Sequence, erro
 	if err != nil {
 		return nil, err
 	}
-	if val, ok := qt3EnvironmentVariables[name]; ok {
-		return SingleString(val), nil
+	ec := getFnContext(ctx)
+	if ec == nil {
+		return validNilSequence, nil
 	}
-	// Look the name up against os.Environ() with an EXACT, case-sensitive match
-	// and never os.LookupEnv. On Windows os.LookupEnv is case-insensitive and
-	// the canonical name differs in case (e.g. "Path"), so environment-variable
-	// ("path") would return a value while available-environment-variables()
-	// lists only "Path" — making the two accessors mutually inconsistent and
-	// breaking F&O conformance (env var names are case-sensitive). Enumerating
-	// os.Environ() (the same source fnAvailableEnvVars uses) keeps them in lock
-	// step on every OS. POSIX behavior is unchanged.
-	for _, env := range os.Environ() {
-		k, v, ok := strings.Cut(env, "=")
-		if ok && k == name {
-			return SingleString(v), nil
-		}
+	value, ok := ec.environmentVariables[name]
+	if !ok {
+		return validNilSequence, nil
 	}
-	return validNilSequence, nil
+	return SingleString(value), nil
 }
 
 func fnCurrentDateTime(ctx context.Context, _ []Sequence) (Sequence, error) {

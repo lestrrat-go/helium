@@ -608,7 +608,8 @@ XPath 3.1 expression parsing and evaluation.
   **Expression.EvaluateReuse(ctx, *EvalState, Node) → (Result, error)** — low-allocation evaluation;
   **Expression.DumpVM(io.Writer) → error** — compiled VM instruction dump
 - **Evaluator fluent setters** (each returns an updated copy; maps/slices cloned unless `EvalBorrowing`):
-  `Namespaces(map[string]string)`, `Variables(map[string]Sequence)`, `Functions(byLocal map[string]Function,
+  `Namespaces(map[string]string)`, `EnvironmentVariables(map[string]string)`, `Variables(map[string]Sequence)`,
+  `Functions(byLocal map[string]Function,
   byQName map[QualifiedName]Function)`, `VariableResolver(VariableResolver)`,
   `FunctionResolver(FunctionResolver)`, `OpLimit(int)`, `CurrentTime(time.Time)`,
   `ImplicitTimezone(*time.Location)`, `DefaultLanguage(string)`, `DefaultCollation(string)`,
@@ -624,6 +625,9 @@ XPath 3.1 expression parsing and evaluation.
   `AllowXML11Chars()`, `DocOrderCache(*DocOrderCache)`, `TraceWriter(io.Writer)`, `Parser(helium.Parser)` (XML
   parser used by `fn:parse-xml`/`fn:parse-xml-fragment`/`fn:doc`; supplies parse policy — limits, FS,
   XXE/network; unset → default `helium.NewParser()`)
+- `fn:environment-variable` and `fn:available-environment-variables` read only the map passed to
+  `Evaluator.EnvironmentVariables`. The default map is empty, so XPath and XSLT expressions cannot read process
+  environment variables unless the caller explicitly supplies them.
 - `Result` — wraps `Sequence`; methods: `Nodes()`, `IsBoolean()`, `IsNumber()`, `IsString()`, `IsAtomic()`, `Atomics()`,
   `Sequence()`, `EBV()`, `StringValue()`, `Copy()`
 - **Reuse:** `Evaluator.NewEvalState(Node) → *EvalState` builds reusable state; `Expression.EvaluateReuse`
