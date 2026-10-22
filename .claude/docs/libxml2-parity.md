@@ -90,7 +90,7 @@ libxml2.
 | XPath 1.0 | Full expression eval, all 13 axes, 27+ functions, custom function registration |
 | C14N | All 3 modes (1.0, Exclusive 1.0, 1.1), comments, node-set, inclusive NS, xml:* inheritance |
 | XSD | Complex/simple types, all compositors, facets, IDC (key/unique/keyref), substitution groups, import/include, xsi:type/nil |
-| RELAX NG | All patterns, name classes, include/override, externalRef, parentRef, data types, interleave, backtracking |
+| RELAX NG | All patterns, name classes, include/override, externalRef, parentRef, data types, interleave, backtracking; content entity references validate against parsed replacement nodes |
 | Schematron | Assert, report, let variables, name, value-of, old (ASCC) + new (ISO) syntax, `queryBinding` (XPath 1.0 and XPath 3.1 families) |
 | XInclude | Recursive inclusion, fallback, marker nodes, base URI fixup, circular detection |
 | Catalog | OASIS XML Catalog, public/system ID resolution, URI resolution, catalog chaining, URN support |

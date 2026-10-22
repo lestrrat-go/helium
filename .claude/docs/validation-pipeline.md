@@ -2030,8 +2030,8 @@ Pattern-matching engine with backtracking:
      lookup)
    - **Data/Value**: type checking
    - **List**: split text, validate items
-3. Element validation: match name, validate attrs, build child list (skip non-content: EntityRef/PI/Comment), validate
-   content, check all attrs+content consumed
+3. Element validation: match name, validate attrs, build child list (skip non-content: PI/Comment), expand content
+   EntityRefs through their parsed replacement nodes, validate content, and check all attrs+content consumed.
 4. Cancellation: `validatePattern` and `validateContentPat` call `validator.stopped` at entry, which polls the
    caller's context once per pattern step. The first error it sees is kept in `validator.stopErr`; from then on
    every step fails at once without polling, so the recursion unwinds without further matching work.
