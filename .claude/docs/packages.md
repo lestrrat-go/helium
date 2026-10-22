@@ -1322,6 +1322,8 @@ Streaming XML writer (no DOM needed).
 - Options: WithIndent(string), WithQuoteChar(byte)
 - Methods: StartDocument/EndDocument, StartElement/EndElement, WriteAttribute, WriteString (escaped), WriteRaw
   (unescaped), WriteComment, WritePI, WriteCDATA, StartDTD/EndDTD, WriteDTDElement/Entity/Attlist/Notation, Flush
+- `StartDocument` transcodes emitted XML to the declared supported encoding; UTF-8 is the default when no encoding
+  is declared. US-ASCII names are refused because this writer does not perform ASCII-only character escaping.
 - State machine: tracks open elements, namespace scopes, self-close optimization
 - Files: `stream.go` (single ~1100 line file)
 - Imports: internal/encoding/, internal/xmlchar/
