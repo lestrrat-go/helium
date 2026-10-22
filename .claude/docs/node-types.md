@@ -686,7 +686,9 @@ that node during `Free` and let a subsequent parse overwrite it. The one excepti
 DOM fast path gives a reference-free attribute value (`createLiteralAttribute`): its content shares the value
 string's bytes, which live in the parse's `valueArena` (heap memory the GC owns, never pooled), not in a slab.
 
-The insertion paths (`addChildPreflight`/`addSiblingPreflight`/`replaceNode`, via `noteCrossDocumentEscape`)
+The insertion paths (`addChildPreflight`/`addSiblingPreflight`/`replaceNode`, via `noteCrossDocumentEscape`),
+and `SetTreeDoc` when it changes an owner document, call `noteCrossDocumentEscape` before replacing ownership.
+This preserves the original slab storage even when callers set ownership before insertion. The insertion paths
 permit linking a node into a DIFFERENT document than the one that owns it — XInclude merges an included
 subtree into the main document, and xslt3 moves result-tree nodes into result documents — but they mark the
 SOURCE document's `slabEscaped` flag when they do. `AddNamespaceDecl` and `SetNamespace` apply the same guard

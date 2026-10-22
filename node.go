@@ -2125,6 +2125,7 @@ func setTreeDoc(n MutableNode, doc *Document) {
 	if n.OwnerDocument() == doc {
 		return
 	}
+	noteCrossDocumentEscape(doc, n)
 
 	if e, ok := AsNode[*Element](n); ok {
 		// A per-list seen guard bounds a cyclic attribute chain (a low-level

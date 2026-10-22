@@ -144,6 +144,35 @@ func TestCrossDocumentMove(t *testing.T) {
 	})
 }
 
+func TestSetTreeDocPreservesSourceSlab(t *testing.T) {
+	src := newPooledDocument()
+	moved, err := src.CreateElement("moved")
+	require.NoError(t, err)
+	txt := src.CreateText([]byte("ORIGINAL-CONTENT"))
+	require.NoError(t, moved.AddChild(txt))
+
+	dst := NewDocument("1.0", "", StandaloneImplicitNo)
+	dstRoot, err := dst.CreateElement("destination")
+	require.NoError(t, err)
+	require.NoError(t, dst.AddChild(dstRoot))
+	moved.SetTreeDoc(dst)
+	require.True(t, src.slabEscaped, "changing the owner document must protect the source slab")
+	require.NoError(t, dstRoot.AddChild(moved))
+
+	src.Free()
+	churn := NewDocument("1.0", "", StandaloneImplicitNo)
+	for range 512 {
+		_, err := churn.CreateElement("OVERWRITE")
+		require.NoError(t, err)
+	}
+
+	require.Equal(t, "moved", moved.Name())
+	require.Equal(t, "ORIGINAL-CONTENT", string(txt.Content()))
+	serialized, err := WriteString(dst)
+	require.NoError(t, err)
+	require.Contains(t, serialized, "ORIGINAL-CONTENT")
+}
+
 // newPooledDocument returns a document whose slab allocators draw pooled chunks
 // from the first node on, as a parsed document's do, so a test can check that
 // Free does not recycle a chunk still holding a moved node.
