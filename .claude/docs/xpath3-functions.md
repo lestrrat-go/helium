@@ -182,7 +182,12 @@ Error/trace: `error` (raises `FOER0000` with optional code/description/value), `
 
 ### `functions_sequence.go`
 `empty`, `exists`, `head`, `tail`, `insert-before`, `remove`, `reverse`, `subsequence`, `unordered`, `zero-or-one`,
-`one-or-more`, `exactly-one`, `deep-equal`, `index-of`
+`one-or-more`, `exactly-one`, `deep-equal`, `index-of`, `sort`
+
+`reverse`, `insert-before`, and `sort` consume sequences through bounded,
+operation-counted iteration before building results. They stop at the configured
+sequence/node-set limit or when the evaluation context cancels. `sort` also
+checks cancellation and charges each key evaluation and comparison.
 
 ### `functions_datetime.go`
 Constructors: `dateTime`

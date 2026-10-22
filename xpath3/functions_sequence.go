@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"math"
 	"math/big"
+	"slices"
 	"sort"
 	"time"
 
@@ -55,7 +56,7 @@ func fnTail(_ context.Context, args []Sequence) (Sequence, error) {
 	return ItemSlice(seqMaterialize(args[0])[1:]), nil
 }
 
-func fnInsertBefore(_ context.Context, args []Sequence) (Sequence, error) {
+func fnInsertBefore(ctx context.Context, args []Sequence) (Sequence, error) {
 	target := args[0]
 	// $position is xs:integer: reject empty/multi-item/non-integer (XPTY0004).
 	posVal, err := coerceArgToInteger(args[1])
@@ -63,7 +64,7 @@ func fnInsertBefore(_ context.Context, args []Sequence) (Sequence, error) {
 		return nil, err
 	}
 	inserts := args[2]
-	tItems := seqMaterialize(target)
+	targetLen := seqLen(target)
 
 	// Clamp on the int64 value so an oversized position cannot wrap when
 	// converted to int (e.g. on 32-bit platforms): a position past the end
@@ -72,17 +73,38 @@ func fnInsertBefore(_ context.Context, args []Sequence) (Sequence, error) {
 	switch {
 	case posVal < 1:
 		pos = 1
-	case posVal > int64(len(tItems)+1):
-		pos = len(tItems) + 1
+	case posVal > int64(targetLen+1):
+		pos = targetLen + 1
 	default:
 		pos = int(posVal)
 	}
 
-	iItems := seqMaterialize(inserts)
-	result := make(ItemSlice, 0, len(tItems)+len(iItems))
-	result = append(result, tItems[:pos-1]...)
-	result = append(result, iItems...)
-	result = append(result, tItems[pos-1:]...)
+	ec := getFnContext(ctx)
+	maxNodes := fnMaxNodes(ec)
+	var result ItemSlice
+	i := 0
+	for item := range seqItems(target) {
+		if i+1 == pos {
+			var err error
+			result, err = appendBoundedSeq(ctx, ec, result, inserts, maxNodes)
+			if err != nil {
+				return nil, err
+			}
+		}
+		var err error
+		result, err = appendBoundedSeq(ctx, ec, result, ItemSlice{item}, maxNodes)
+		if err != nil {
+			return nil, err
+		}
+		i++
+	}
+	if pos == targetLen+1 {
+		var err error
+		result, err = appendBoundedSeq(ctx, ec, result, inserts, maxNodes)
+		if err != nil {
+			return nil, err
+		}
+	}
 	return result, nil
 }
 
@@ -106,12 +128,18 @@ func fnRemove(_ context.Context, args []Sequence) (Sequence, error) {
 	return result, nil
 }
 
-func fnReverse(_ context.Context, args []Sequence) (Sequence, error) {
-	seq := args[0]
-	items := seqMaterialize(seq)
-	result := make(ItemSlice, len(items))
-	for i, item := range items {
-		result[len(items)-1-i] = item
+func fnReverse(ctx context.Context, args []Sequence) (Sequence, error) {
+	ec := getFnContext(ctx)
+	items, err := appendBoundedSeq(ctx, ec, nil, args[0], fnMaxNodes(ec))
+	if err != nil {
+		return nil, err
+	}
+	var result ItemSlice
+	for _, item := range slices.Backward(items) {
+		result, err = appendBoundedSeq(ctx, ec, result, ItemSlice{item}, fnMaxNodes(ec))
+		if err != nil {
+			return nil, err
+		}
 	}
 	return result, nil
 }
@@ -582,7 +610,12 @@ func fnPosition(ctx context.Context, _ []Sequence) (Sequence, error) {
 // fnSort implements fn:sort($input [, $collation [, $key]])
 func fnSort(ctx context.Context, args []Sequence) (Sequence, error) {
 	input := args[0]
+	ec := getFnContext(ctx)
+	maxNodes := fnMaxNodes(ec)
 	if seqLen(input) <= 1 {
+		if err := fnCountOp(ctx, ec); err != nil {
+			return nil, err
+		}
 		return input, nil
 	}
 
@@ -616,9 +649,15 @@ func fnSort(ctx context.Context, args []Sequence) (Sequence, error) {
 		item Item
 		key  Sequence
 	}
-	inputItems := seqMaterialize(input)
+	inputItems, err := appendBoundedSeq(ctx, ec, nil, input, maxNodes)
+	if err != nil {
+		return nil, err
+	}
 	pairs := make([]sortPair, len(inputItems))
 	for i, item := range inputItems {
+		if err := fnCountOp(ctx, ec); err != nil {
+			return nil, err
+		}
 		if keyFn != nil {
 			k, err := keyFn.Invoke(ctx, []Sequence{ItemSlice{item}})
 			if err != nil {
@@ -646,10 +685,18 @@ func fnSort(ctx context.Context, args []Sequence) (Sequence, error) {
 		if sortErr != nil {
 			return false
 		}
+		if err := fnCountOp(ctx, ec); err != nil {
+			sortErr = err
+			return false
+		}
 		ki := pairs[i].key
 		kj := pairs[j].key
 		minLen := min(seqLen(ki), seqLen(kj))
 		for idx := range minLen {
+			if err := fnCountOp(ctx, ec); err != nil {
+				sortErr = err
+				return false
+			}
 			ai, err1 := AtomizeItem(ki.Get(idx))
 			aj, err2 := AtomizeItem(kj.Get(idx))
 			if err1 != nil || err2 != nil {
@@ -675,9 +722,12 @@ func fnSort(ctx context.Context, args []Sequence) (Sequence, error) {
 		return nil, sortErr
 	}
 
-	result := make(ItemSlice, len(pairs))
-	for i, p := range pairs {
-		result[i] = p.item
+	var result ItemSlice
+	for _, p := range pairs {
+		result, sortErr = appendBoundedSeq(ctx, ec, result, ItemSlice{p.item}, maxNodes)
+		if sortErr != nil {
+			return nil, sortErr
+		}
 	}
 	return result, nil
 }
