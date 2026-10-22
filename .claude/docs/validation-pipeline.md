@@ -2384,9 +2384,9 @@ guarding against a nil-deref panic.
 4. For each test:
    - Evaluate XPath, convert to boolean
    - If the test XPath **errors at evaluation**, or its result has no effective boolean value (XPath 3.1
-     FORG0006), surface an `XPath error : ...` diagnostic and treat the test as `false` (mirrors libxml2
-     `xmlSchematronRunTest` returning 0): an **assert** then fires/fails, a **report** stays silent. A broken
-     test is never treated as satisfied.
+     FORG0006), surface an `XPath error : ...` diagnostic, mark the document invalid, and treat the test as `false`
+     (mirrors libxml2 `xmlSchematronRunTest` returning 0): an **assert** then fires, while a **report** stays silent.
+     An evaluation error never lets validation succeed.
    - **Assert**: error if false
    - **Report**: error if true
 5. Format message (interpolate text/name/value-of parts)

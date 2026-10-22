@@ -419,12 +419,11 @@ func TestErroringTestXPath(t *testing.T) {
 
 		var msgs []string
 		handler := messageCollector{msgs: &msgs}
-		// A report whose test errors is treated as false (does not fire),
-		// so validation is not marked failed, but the XPath error must
-		// still be surfaced, and never swallowed.
+		// A report whose test errors does not fire, but its XPath error
+		// still makes validation fail.
 		verr := schematron.NewValidator(schema).Label("test.xml").ErrorHandler(handler).Validate(t.Context(), doc)
 
-		require.NoError(t, verr)
+		require.ErrorIs(t, verr, schematron.ErrValidationFailed)
 		require.True(t, hasXPathError(msgs), "expected an XPath error to be reported, got %v", msgs)
 	})
 

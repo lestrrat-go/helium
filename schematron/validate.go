@@ -82,6 +82,7 @@ func validateDocument(ctx context.Context, doc *helium.Document, schema *Schema,
 					// libxml2's xmlSchematronRunTest, which returns 0
 					// (false) on evaluation failure.
 					if err != nil {
+						valid = false
 						boolVal = false
 						handler.Handle(ctx, helium.NewLeveledError(fmt.Sprintf("XPath error : %s\n", formatXPathError(err)), helium.ErrorLevelError))
 					}
