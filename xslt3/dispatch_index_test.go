@@ -6,6 +6,7 @@ import (
 	"testing"
 
 	"github.com/lestrrat-go/helium"
+	"github.com/lestrrat-go/helium/internal/lexicon"
 	"github.com/lestrrat-go/helium/xslt3"
 	"github.com/stretchr/testify/require"
 )
@@ -55,7 +56,7 @@ func TestDispatchIndexConflictAcrossBuckets(t *testing.T) {
 		OnMultipleMatch(xslt3.OnMultipleMatchFail).
 		Serialize(t.Context())
 	require.Error(t, err, "a name-indexed and an unindexed template of equal priority both matching <a/> must conflict")
-	require.Contains(t, err.Error(), "XTDE0540")
+	require.Contains(t, err.Error(), lexicon.ErrXTDE0540)
 }
 
 // TestDispatchIndexKeyPatternAlwaysProbed is the design step 8 / risk 6

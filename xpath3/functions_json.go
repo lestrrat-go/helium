@@ -78,10 +78,10 @@ func fnParseJSON(ctx context.Context, args []Sequence) (Sequence, error) {
 	var extra json.Token
 	extra, err = dec.Token()
 	if err == nil {
-		return nil, &XPathError{Code: errCodeFOJS0001, Message: fmt.Sprintf("unexpected trailing content after JSON value: %v", extra)}
+		return nil, &XPathError{Code: lexicon.ErrFOJS0001, Message: fmt.Sprintf("unexpected trailing content after JSON value: %v", extra)}
 	}
 	if !errors.Is(err, io.EOF) {
-		return nil, &XPathError{Code: errCodeFOJS0001, Message: fmt.Sprintf("invalid trailing content: %v", err)}
+		return nil, &XPathError{Code: lexicon.ErrFOJS0001, Message: fmt.Sprintf("invalid trailing content: %v", err)}
 	}
 	if item == nil {
 		return validNilSequence, nil
@@ -111,16 +111,16 @@ func parseJSONOptions(ctx context.Context, args []Sequence) (jsonOptions, error)
 	liberalKey := AtomicValue{TypeName: TypeString, Value: "liberal"}
 	if v, found := m.Get(liberalKey); found {
 		if seqLen(v) != 1 {
-			return opts, &XPathError{Code: errCodeFOJS0005, Message: "option 'liberal' must be a single xs:boolean"}
+			return opts, &XPathError{Code: lexicon.ErrFOJS0005, Message: "option 'liberal' must be a single xs:boolean"}
 		}
 		av, ok := v.Get(0).(AtomicValue)
 		if !ok {
-			return opts, &XPathError{Code: errCodeFOJS0005, Message: "option 'liberal' must be xs:boolean"}
+			return opts, &XPathError{Code: lexicon.ErrFOJS0005, Message: "option 'liberal' must be xs:boolean"}
 		}
 		if b, ok := av.Value.(bool); ok {
 			opts.liberal = b
 		} else {
-			return opts, &XPathError{Code: errCodeFOJS0005,
+			return opts, &XPathError{Code: lexicon.ErrFOJS0005,
 				Message: "option 'liberal' must be xs:boolean, got " + av.TypeName}
 		}
 	}
@@ -139,13 +139,13 @@ func parseJSONOptions(ctx context.Context, args []Sequence) (jsonOptions, error)
 			if isNoTypedValueError(err) {
 				return opts, err
 			}
-			return opts, &XPathError{Code: errCodeFOJS0005, Message: "option 'duplicates' must be a single string"}
+			return opts, &XPathError{Code: lexicon.ErrFOJS0005, Message: "option 'duplicates' must be a single string"}
 		}
 		switch s {
 		case duplicatesReject, duplicatesUseFirst, "use-last":
 			opts.duplicates = s
 		default:
-			return opts, &XPathError{Code: errCodeFOJS0005,
+			return opts, &XPathError{Code: lexicon.ErrFOJS0005,
 				Message: fmt.Sprintf("invalid value for 'duplicates' option: %q", s)}
 		}
 	}
@@ -154,16 +154,16 @@ func parseJSONOptions(ctx context.Context, args []Sequence) (jsonOptions, error)
 	escKey := AtomicValue{TypeName: TypeString, Value: "escape"}
 	if v, found := m.Get(escKey); found {
 		if seqLen(v) != 1 {
-			return opts, &XPathError{Code: errCodeFOJS0005, Message: "option 'escape' must be a single xs:boolean"}
+			return opts, &XPathError{Code: lexicon.ErrFOJS0005, Message: "option 'escape' must be a single xs:boolean"}
 		}
 		av, ok := v.Get(0).(AtomicValue)
 		if !ok {
-			return opts, &XPathError{Code: errCodeFOJS0005, Message: "option 'escape' must be xs:boolean"}
+			return opts, &XPathError{Code: lexicon.ErrFOJS0005, Message: "option 'escape' must be xs:boolean"}
 		}
 		if b, ok := av.Value.(bool); ok {
 			opts.escape = b
 		} else {
-			return opts, &XPathError{Code: errCodeFOJS0005,
+			return opts, &XPathError{Code: lexicon.ErrFOJS0005,
 				Message: "option 'escape' must be xs:boolean, got " + av.TypeName}
 		}
 	}
@@ -172,16 +172,16 @@ func parseJSONOptions(ctx context.Context, args []Sequence) (jsonOptions, error)
 	fbKey := AtomicValue{TypeName: TypeString, Value: "fallback"}
 	if v, found := m.Get(fbKey); found {
 		if seqLen(v) != 1 {
-			return opts, &XPathError{Code: errCodeFOJS0005,
+			return opts, &XPathError{Code: lexicon.ErrFOJS0005,
 				Message: "option 'fallback' must be a single function item"}
 		}
 		fi, ok := v.Get(0).(FunctionItem)
 		if !ok {
-			return opts, &XPathError{Code: errCodeFOJS0005,
+			return opts, &XPathError{Code: lexicon.ErrFOJS0005,
 				Message: "option 'fallback' must be a function item"}
 		}
 		if fi.Arity != 1 {
-			return opts, &XPathError{Code: errCodeFOJS0005,
+			return opts, &XPathError{Code: lexicon.ErrFOJS0005,
 				Message: fmt.Sprintf("option 'fallback' must have arity 1, got %d", fi.Arity)}
 		}
 		opts.fallback = &fi
@@ -237,7 +237,7 @@ func (b *jsonBudget) charge(ctx context.Context, count int) error {
 func parseJSONValue(ctx context.Context, dec *json.Decoder, opts jsonOptions, b *jsonBudget, depth int) (Item, error) {
 	tok, err := dec.Token()
 	if err != nil {
-		return nil, &XPathError{Code: errCodeFOJS0001, Message: fmt.Sprintf("invalid JSON: %v", err)}
+		return nil, &XPathError{Code: lexicon.ErrFOJS0001, Message: fmt.Sprintf("invalid JSON: %v", err)}
 	}
 	return parseJSONToken(ctx, tok, dec, opts, b, depth)
 }
@@ -259,11 +259,11 @@ func parseJSONToken(ctx context.Context, tok json.Token, dec *json.Decoder, opts
 				}
 				keyTok, err := dec.Token()
 				if err != nil {
-					return nil, &XPathError{Code: errCodeFOJS0001, Message: fmt.Sprintf("invalid JSON: %v", err)}
+					return nil, &XPathError{Code: lexicon.ErrFOJS0001, Message: fmt.Sprintf("invalid JSON: %v", err)}
 				}
 				key, ok := keyTok.(string)
 				if !ok {
-					return nil, &XPathError{Code: errCodeFOJS0001, Message: "invalid JSON object key"}
+					return nil, &XPathError{Code: lexicon.ErrFOJS0001, Message: "invalid JSON object key"}
 				}
 				key, err = applyJSONStringOptions(ctx, key, opts)
 				if err != nil {
@@ -282,7 +282,7 @@ func parseJSONToken(ctx context.Context, tok json.Token, dec *json.Decoder, opts
 				if prev, found := index[key]; found {
 					switch opts.duplicates {
 					case duplicatesReject:
-						return nil, &XPathError{Code: errCodeFOJS0003, Message: fmt.Sprintf("duplicate key in JSON object: %q", key)}
+						return nil, &XPathError{Code: lexicon.ErrFOJS0003, Message: fmt.Sprintf("duplicate key in JSON object: %q", key)}
 					case duplicatesUseFirst:
 						continue
 					case "use-last":
@@ -299,10 +299,10 @@ func parseJSONToken(ctx context.Context, tok json.Token, dec *json.Decoder, opts
 			}
 			endTok, err := dec.Token()
 			if err != nil {
-				return nil, &XPathError{Code: errCodeFOJS0001, Message: fmt.Sprintf("invalid JSON: %v", err)}
+				return nil, &XPathError{Code: lexicon.ErrFOJS0001, Message: fmt.Sprintf("invalid JSON: %v", err)}
 			}
 			if end, ok := endTok.(json.Delim); !ok || end != '}' {
-				return nil, &XPathError{Code: errCodeFOJS0001, Message: "invalid JSON: expected object close delimiter"}
+				return nil, &XPathError{Code: lexicon.ErrFOJS0001, Message: "invalid JSON: expected object close delimiter"}
 			}
 			return NewMap(entries), nil
 		case '[':
@@ -327,14 +327,14 @@ func parseJSONToken(ctx context.Context, tok json.Token, dec *json.Decoder, opts
 			}
 			endTok, err := dec.Token()
 			if err != nil {
-				return nil, &XPathError{Code: errCodeFOJS0001, Message: fmt.Sprintf("invalid JSON: %v", err)}
+				return nil, &XPathError{Code: lexicon.ErrFOJS0001, Message: fmt.Sprintf("invalid JSON: %v", err)}
 			}
 			if end, ok := endTok.(json.Delim); !ok || end != ']' {
-				return nil, &XPathError{Code: errCodeFOJS0001, Message: "invalid JSON: expected array close delimiter"}
+				return nil, &XPathError{Code: lexicon.ErrFOJS0001, Message: "invalid JSON: expected array close delimiter"}
 			}
 			return NewArray(members), nil
 		default:
-			return nil, &XPathError{Code: errCodeFOJS0001, Message: fmt.Sprintf("unexpected JSON delimiter: %q", v)}
+			return nil, &XPathError{Code: lexicon.ErrFOJS0001, Message: fmt.Sprintf("unexpected JSON delimiter: %q", v)}
 		}
 	default:
 		if s, ok := v.(string); ok {
@@ -373,7 +373,7 @@ func preprocessJSONStringLiterals(s string) (string, map[rune]string, error) {
 			i += size
 		case '\\':
 			if i+1 >= len(s) {
-				return "", nil, &XPathError{Code: errCodeFOJS0001, Message: "invalid JSON: trailing backslash in string"}
+				return "", nil, &XPathError{Code: lexicon.ErrFOJS0001, Message: "invalid JSON: trailing backslash in string"}
 			}
 			next := s[i+1]
 			switch next {
@@ -390,7 +390,7 @@ func preprocessJSONStringLiterals(s string) (string, map[rune]string, error) {
 				i += 2
 			case 'u':
 				if i+6 > len(s) {
-					return "", nil, &XPathError{Code: errCodeFOJS0001, Message: "invalid JSON: incomplete \\u escape"}
+					return "", nil, &XPathError{Code: lexicon.ErrFOJS0001, Message: "invalid JSON: incomplete \\u escape"}
 				}
 				escapeText := s[i : i+6]
 				cp, err := parseJSONHexEscape(s[i+2 : i+6])
@@ -427,11 +427,11 @@ func preprocessJSONStringLiterals(s string) (string, map[rune]string, error) {
 					i += 6
 				}
 			default:
-				return "", nil, &XPathError{Code: errCodeFOJS0001, Message: fmt.Sprintf("invalid JSON: invalid escape sequence \\%c", next)}
+				return "", nil, &XPathError{Code: lexicon.ErrFOJS0001, Message: fmt.Sprintf("invalid JSON: invalid escape sequence \\%c", next)}
 			}
 		default:
 			if r < 0x20 {
-				return "", nil, &XPathError{Code: errCodeFOJS0001, Message: "invalid JSON: unescaped control character in string"}
+				return "", nil, &XPathError{Code: lexicon.ErrFOJS0001, Message: "invalid JSON: unescaped control character in string"}
 			}
 			b.WriteString(s[i : i+size])
 			i += size
@@ -452,7 +452,7 @@ func parseJSONHexEscape(hex string) (uint32, error) {
 		case c >= 'A' && c <= 'F':
 			cp += uint32(c-'A') + 10
 		default:
-			return 0, &XPathError{Code: errCodeFOJS0001, Message: fmt.Sprintf("invalid JSON: invalid hex digit in \\u escape: %c", c)}
+			return 0, &XPathError{Code: lexicon.ErrFOJS0001, Message: fmt.Sprintf("invalid JSON: invalid hex digit in \\u escape: %c", c)}
 		}
 	}
 	return cp, nil
@@ -467,7 +467,7 @@ func nextJSONPlaceholderRune(source string, used map[rune]string) (rune, error) 
 			return r, nil
 		}
 	}
-	return 0, &XPathError{Code: errCodeFOJS0001, Message: "exhausted JSON placeholder runes"}
+	return 0, &XPathError{Code: lexicon.ErrFOJS0001, Message: "exhausted JSON placeholder runes"}
 }
 
 func applyJSONStringOptions(ctx context.Context, s string, opts jsonOptions) (string, error) {
@@ -476,7 +476,7 @@ func applyJSONStringOptions(ctx context.Context, s string, opts jsonOptions) (st
 		for _, r := range s {
 			if raw, found := opts.invalidEsc[r]; found {
 				if opts.fallback != nil {
-					return "", &XPathError{Code: errCodeFOJS0001, Message: "fallback cannot be used with escape=true() for escaped invalid characters"}
+					return "", &XPathError{Code: lexicon.ErrFOJS0001, Message: "fallback cannot be used with escape=true() for escaped invalid characters"}
 				}
 				b.WriteString(canonicalInvalidJSONEscape(raw))
 				continue
@@ -585,11 +585,11 @@ func fnJSONDoc(ctx context.Context, args []Sequence) (Sequence, error) {
 	cfg := unparsedTextConfig(ctx)
 	resolvedURI, err := unparsedtext.ResolveURI(ctx, cfg, uri)
 	if err != nil {
-		return nil, &XPathError{Code: errCodeFODC0002, Message: fmt.Sprintf("json-doc: cannot resolve URI: %v", err)}
+		return nil, &XPathError{Code: lexicon.ErrFODC0002, Message: fmt.Sprintf("json-doc: cannot resolve URI: %v", err)}
 	}
 	body, err := unparsedtext.ReadURI(ctx, cfg, resolvedURI)
 	if err != nil {
-		return nil, &XPathError{Code: errCodeFODC0002, Message: fmt.Sprintf("json-doc: cannot retrieve resource: %v", err)}
+		return nil, &XPathError{Code: lexicon.ErrFODC0002, Message: fmt.Sprintf("json-doc: cannot retrieve resource: %v", err)}
 	}
 
 	// Delegate to parse-json logic, preserving any caller-supplied options.
@@ -613,7 +613,7 @@ func jsonToXDM(v any) (Item, error) {
 		s := val.String()
 		f, err := val.Float64()
 		if err != nil {
-			return nil, &XPathError{Code: errCodeFOJS0001, Message: "invalid JSON number: " + s}
+			return nil, &XPathError{Code: lexicon.ErrFOJS0001, Message: "invalid JSON number: " + s}
 		}
 		return AtomicValue{TypeName: TypeDouble, Value: NewDouble(f)}, nil
 	case string:
@@ -652,6 +652,6 @@ func jsonToXDM(v any) (Item, error) {
 		}
 		return NewMap(entries), nil
 	default:
-		return nil, &XPathError{Code: errCodeFOJS0001, Message: fmt.Sprintf("unexpected JSON type: %T", v)}
+		return nil, &XPathError{Code: lexicon.ErrFOJS0001, Message: fmt.Sprintf("unexpected JSON type: %T", v)}
 	}
 }

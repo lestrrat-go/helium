@@ -6,6 +6,7 @@ import (
 	"testing"
 
 	"github.com/lestrrat-go/helium"
+	"github.com/lestrrat-go/helium/internal/lexicon"
 	"github.com/lestrrat-go/helium/xpath3"
 	"github.com/lestrrat-go/helium/xsd"
 	"github.com/stretchr/testify/require"
@@ -66,7 +67,7 @@ func TestFnDataElementOnlyRaisesFOTY0012_Mock(t *testing.T) {
 		require.Error(t, err)
 		var xerr *xpath3.XPathError
 		require.True(t, errors.As(err, &xerr), "want *xpath3.XPathError, got %T: %v", err, err)
-		require.Equal(t, "FOTY0012", xerr.Code)
+		require.Equal(t, lexicon.ErrFOTY0012, xerr.Code)
 	})
 
 	// An empty-content complex type has typed value () per XDM 3.1 §5.15, so
@@ -160,7 +161,7 @@ func TestFnDataElementOnlyRaisesFOTY0012_XSD(t *testing.T) {
 		require.Error(t, err)
 		var xerr *xpath3.XPathError
 		require.True(t, errors.As(err, &xerr), "want *xpath3.XPathError, got %T: %v", err, err)
-		require.Equal(t, "FOTY0012", xerr.Code)
+		require.Equal(t, lexicon.ErrFOTY0012, xerr.Code)
 	})
 
 	t.Run("simple-content child atomizes normally", func(t *testing.T) {
@@ -182,7 +183,7 @@ func TestFnDataElementOnlyRaisesFOTY0012_XSD(t *testing.T) {
 		require.Error(t, err)
 		var xerr *xpath3.XPathError
 		require.True(t, errors.As(err, &xerr), "want *xpath3.XPathError, got %T: %v", err, err)
-		require.Equal(t, "FOTY0012", xerr.Code)
+		require.Equal(t, lexicon.ErrFOTY0012, xerr.Code)
 	})
 }
 
@@ -211,5 +212,5 @@ func TestFnDataElementOnlyErrorOrder(t *testing.T) {
 	require.Error(t, err)
 	var xerr *xpath3.XPathError
 	require.True(t, errors.As(err, &xerr), "want *xpath3.XPathError, got %T: %v", err, err)
-	require.Equal(t, "FOTY0013", xerr.Code)
+	require.Equal(t, lexicon.ErrFOTY0013, xerr.Code)
 }

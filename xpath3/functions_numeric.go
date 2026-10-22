@@ -224,7 +224,7 @@ func resolveRoundScale(precision *big.Int, intDigits, fracDigits int) (int, roun
 	if fracDigits == ratFracDigitNonTerminating {
 		if precision.Cmp(big.NewInt(roundMaxComputeScale)) > 0 {
 			return 0, roundCompute, &XPathError{
-				Code: errCodeFOAR0002,
+				Code: lexicon.ErrFOAR0002,
 				Message: fmt.Sprintf(
 					"round precision %s exceeds the maximum of %d fractional digits for a non-terminating decimal",
 					precision.String(), roundMaxComputeScale),

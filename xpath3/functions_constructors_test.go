@@ -5,6 +5,7 @@ import (
 	"testing"
 
 	"github.com/lestrrat-go/helium"
+	"github.com/lestrrat-go/helium/internal/lexicon"
 	"github.com/lestrrat-go/helium/xpath3"
 	"github.com/stretchr/testify/require"
 )
@@ -39,7 +40,7 @@ func TestXSTokenListCardinality(t *testing.T) {
 				require.NoError(t, err)
 				_, err = xpath3.NewEvaluator(xpath3.DefaultEvaluatorOptions).Evaluate(t.Context(), compiled, doc)
 				require.Error(t, err)
-				require.Contains(t, err.Error(), "XPTY0004")
+				require.Contains(t, err.Error(), lexicon.ErrXPTY0004)
 			})
 		}
 	})
@@ -53,7 +54,7 @@ func TestXSTokenListCardinality(t *testing.T) {
 			`xs:ENTITIES(["a", "b"])`,
 		} {
 			t.Run(expr, func(t *testing.T) {
-				requireXPathErrorCode(t, doc, expr, "XPTY0004")
+				requireXPathErrorCode(t, doc, expr, lexicon.ErrXPTY0004)
 			})
 		}
 	})
@@ -69,7 +70,7 @@ func TestXSTokenListCardinality(t *testing.T) {
 			`xs:ENTITIES(["a", "b", map{"x":"y"}])`,
 		} {
 			t.Run(expr, func(t *testing.T) {
-				requireXPathErrorCode(t, doc, expr, "FOTY0013")
+				requireXPathErrorCode(t, doc, expr, lexicon.ErrFOTY0013)
 			})
 		}
 	})
@@ -174,7 +175,7 @@ func TestXSScalarConstructorArrayCardinality(t *testing.T) {
 		`xs:dateTimeStamp(["2000-01-01T00:00:00Z", "2001-01-01T00:00:00Z"])`,
 	} {
 		t.Run(expr, func(t *testing.T) {
-			requireXPathErrorCode(t, doc, expr, "XPTY0004")
+			requireXPathErrorCode(t, doc, expr, lexicon.ErrXPTY0004)
 		})
 	}
 }
@@ -201,7 +202,7 @@ func TestXSDateTimeStampWhitespace(t *testing.T) {
 		require.NoError(t, err)
 		_, err = xpath3.NewEvaluator(xpath3.DefaultEvaluatorOptions).Evaluate(t.Context(), compiled, doc)
 		require.Error(t, err)
-		require.Contains(t, err.Error(), "FORG0001")
+		require.Contains(t, err.Error(), lexicon.ErrFORG0001)
 	})
 }
 
@@ -269,7 +270,7 @@ func TestXSDateTimeStampInvalidString(t *testing.T) {
 		require.Error(t, err)
 		var xerr *xpath3.XPathError
 		require.True(t, errors.As(err, &xerr), "error must be *xpath3.XPathError, got %T: %v", err, err)
-		require.Equal(t, "FORG0001", xerr.Code)
+		require.Equal(t, lexicon.ErrFORG0001, xerr.Code)
 		require.Contains(t, xerr.Error(), "xs:dateTimeStamp")
 		require.NotContains(t, xerr.Error(), "xs:dateTime\"")
 	})
@@ -294,6 +295,6 @@ func TestXSDateTimeStampNodeValue(t *testing.T) {
 
 	t.Run("node value without timezone rejected", func(t *testing.T) {
 		doc := mustParseXML(t, "<root>2000-01-01T00:00:00</root>")
-		requireXPathErrorCode(t, doc, `xs:dateTimeStamp(/root)`, "FORG0001")
+		requireXPathErrorCode(t, doc, `xs:dateTimeStamp(/root)`, lexicon.ErrFORG0001)
 	})
 }

@@ -202,7 +202,7 @@ func resolvePrefix(ec *evalContext, prefix string) (string, error) {
 	if uri, ok := defaultPrefixNS[prefix]; ok {
 		return uri, nil
 	}
-	return "", &XPathError{Code: errCodeFONS0004, Message: "undeclared namespace prefix: " + prefix}
+	return "", &XPathError{Code: lexicon.ErrFONS0004, Message: "undeclared namespace prefix: " + prefix}
 }
 
 func checkArity(fn Function, name string, arity int) error {
@@ -347,7 +347,7 @@ func isNoTypedValueError(err error) bool {
 	if !errors.As(err, &xerr) {
 		return false
 	}
-	return xerr.Code == errCodeFOTY0012 || xerr.Code == errCodeFOTY0013
+	return xerr.Code == lexicon.ErrFOTY0012 || xerr.Code == lexicon.ErrFOTY0013
 }
 
 // coerceArgToStringRequired applies XPath 3.1 function coercion rules for xs:string params.
@@ -567,7 +567,7 @@ func init() {
 }
 
 func fnError(ctx context.Context, args []Sequence) (Sequence, error) {
-	code := QNameValue{Prefix: lexicon.PrefixErr, URI: NSErr, Local: errCodeFOER0000}
+	code := QNameValue{Prefix: lexicon.PrefixErr, URI: NSErr, Local: lexicon.ErrFOER0000}
 	msg := "error() called"
 	if len(args) > 0 {
 		qv, hasCode, err := coerceErrorCode(args[0])

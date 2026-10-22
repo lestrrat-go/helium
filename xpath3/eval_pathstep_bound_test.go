@@ -5,6 +5,7 @@ import (
 	"testing"
 
 	"github.com/lestrrat-go/helium"
+	"github.com/lestrrat-go/helium/internal/lexicon"
 	"github.com/lestrrat-go/helium/xpath3"
 	"github.com/stretchr/testify/require"
 )
@@ -81,8 +82,8 @@ type pathStepMixCase struct {
 const pathStepMixDoc = `<r><a id="1"/><a id="2"/></r>`
 
 const (
-	codeXPTY0018 = "XPTY0018"
-	codeXPTY0019 = "XPTY0019"
+	codeXPTY0018 = lexicon.ErrXPTY0018
+	codeXPTY0019 = lexicon.ErrXPTY0019
 )
 
 // XPath 3.1 §3.3.1.1: the last step of E1/E2 may return nodes or non-nodes but

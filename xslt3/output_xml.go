@@ -141,7 +141,7 @@ func (w shortWriteCheckingWriter) Write(data []byte) (int, error) {
 // through unchanged.
 func xmlInvalidCharError(err error) error {
 	if err != nil && errors.Is(err, helium.ErrInvalidXMLChar) {
-		return dynamicError(errCodeSERE0006, "%s", err.Error())
+		return dynamicError(lexicon.ErrSERE0006, "%s", err.Error())
 	}
 	return err
 }

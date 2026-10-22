@@ -7,6 +7,7 @@ import (
 	"strings"
 
 	"github.com/lestrrat-go/helium"
+	"github.com/lestrrat-go/helium/internal/lexicon"
 	"github.com/lestrrat-go/helium/internal/sequence"
 	ixpath "github.com/lestrrat-go/helium/internal/xpath"
 )
@@ -283,7 +284,7 @@ func atomizeListToken(tok, listItem string, ni NodeItem) (AtomicValue, error) {
 		qv, err := resolveQNameFromNode(tok, ni.Node, ni.QNameNoDefaultNS)
 		if err != nil {
 			return AtomicValue{}, &XPathError{
-				Code:    errCodeFORG0001,
+				Code:    lexicon.ErrFORG0001,
 				Message: fmt.Sprintf("invalid QName list item %q: %v", tok, err),
 			}
 		}
@@ -454,7 +455,7 @@ func EBV(seq Sequence) (bool, error) {
 	}
 
 	return false, &XPathError{
-		Code:    errCodeFORG0006,
+		Code:    lexicon.ErrFORG0006,
 		Message: "effective boolean value not defined for sequence of length > 1 starting with non-node",
 	}
 }
@@ -467,7 +468,7 @@ func ebvSingle(item Item) (bool, error) {
 		return true, nil
 	default:
 		return false, &XPathError{
-			Code:    errCodeFORG0006,
+			Code:    lexicon.ErrFORG0006,
 			Message: fmt.Sprintf("effective boolean value not defined for %T", item),
 		}
 	}
@@ -506,7 +507,7 @@ func ebvAtomic(v AtomicValue) (bool, error) {
 		}
 	}
 	return false, &XPathError{
-		Code:    errCodeFORG0006,
+		Code:    lexicon.ErrFORG0006,
 		Message: fmt.Sprintf("effective boolean value not defined for %s", v.TypeName),
 	}
 }

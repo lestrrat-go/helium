@@ -34,16 +34,6 @@ const (
 	// NamespaceErr is the XPath/XQuery error namespace.
 	NamespaceErr = "http://www.w3.org/2005/xqt-errors"
 
-	// ErrXPTY0004 is the W3C XPath/XQuery type-error code raised when an
-	// operand's type is not appropriate for the operation. Used by xpath3
-	// internally and asserted by both xpath3 and xslt3 test fixtures.
-	ErrXPTY0004 = "XPTY0004"
-
-	// ErrFOCH0001 is the W3C XPath/XQuery error code raised when a codepoint
-	// is not a valid XML character (e.g. fn:codepoints-to-string with an
-	// out-of-range value). Used by xpath3 and asserted by test fixtures.
-	ErrFOCH0001 = "FOCH0001"
-
 	// NamespaceXML is the XML namespace URI (predeclared, prefix "xml").
 	NamespaceXML = "http://www.w3.org/XML/1998/namespace"
 

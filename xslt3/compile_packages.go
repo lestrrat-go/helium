@@ -18,18 +18,18 @@ func (c *compiler) compileUsePackage(ctx context.Context, elem *helium.Element) 
 	}
 	pkgName := getAttr(elem, "name")
 	if pkgName == "" {
-		return staticError(errCodeXTSE0010, "xsl:use-package requires name attribute")
+		return staticError(lexicon.ErrXTSE0010, "xsl:use-package requires name attribute")
 	}
 	pkgVersion := getAttr(elem, "package-version")
 
 	if c.packageResolver == nil {
-		return staticError(errCodeXTSE3000,
+		return staticError(lexicon.ErrXTSE3000,
 			"xsl:use-package requires a PackageResolver but none is configured (package %q)", pkgName)
 	}
 
 	rc, pkgBaseURI, err := c.packageResolver.ResolvePackage(pkgName, pkgVersion)
 	if err != nil {
-		return staticError(errCodeXTSE3000,
+		return staticError(lexicon.ErrXTSE3000,
 			"xsl:use-package: cannot resolve package %q version %q: %v", pkgName, pkgVersion, err)
 	}
 	defer func() { _ = rc.Close() }()
@@ -144,7 +144,7 @@ func (c *compiler) mergePackageComponents(ctx context.Context, pkg *Stylesheet, 
 	// XTSE3032: if xsl:accept has component="*", names must be a wildcard.
 	for _, rule := range acceptRules {
 		if rule.component == xslWildcard && !isWildcard(rule.names) {
-			return staticError(errCodeXTSE3032,
+			return staticError(lexicon.ErrXTSE3032,
 				"xsl:accept with component='*' requires names to be a wildcard, got %q", rule.names)
 		}
 	}
@@ -162,13 +162,13 @@ func (c *compiler) mergePackageComponents(ctx context.Context, pkg *Stylesheet, 
 	if oset != nil {
 		for name := range oset.namedTemplates {
 			if _, exists := c.localTemplateNames[name]; exists {
-				return staticError(errCodeXTSE3055,
+				return staticError(lexicon.ErrXTSE3055,
 					"override template %q conflicts with a local template of the same name", name)
 			}
 		}
 		for fk := range oset.functions {
 			if _, exists := c.stylesheet.functions[fk]; exists {
-				return staticError(errCodeXTSE3055,
+				return staticError(lexicon.ErrXTSE3055,
 					"override function %s#%d conflicts with a local function of the same name",
 					fmt.Sprintf("{%s}%s", fk.Name.URI, fk.Name.Name), fk.Arity)
 			}
@@ -176,7 +176,7 @@ func (c *compiler) mergePackageComponents(ctx context.Context, pkg *Stylesheet, 
 		for name := range oset.variables {
 			for _, v := range c.stylesheet.globalVars {
 				if v.Name == name && v.OwnerPackage == nil {
-					return staticError(errCodeXTSE3055,
+					return staticError(lexicon.ErrXTSE3055,
 						"override variable %q conflicts with a local variable of the same name", name)
 				}
 			}
@@ -202,7 +202,7 @@ func (c *compiler) mergePackageComponents(ctx context.Context, pkg *Stylesheet, 
 					}
 					pkgVis := getComponentVisibility(pkg, xslElemTemplate, tmpl.Name)
 					if !isAcceptVisibilityCompatible(pkgVis, rule.visibility) {
-						return staticError(errCodeXTSE3040,
+						return staticError(lexicon.ErrXTSE3040,
 							"xsl:accept: visibility %q is incompatible with component %q (declared %s)",
 							rule.visibility, tmpl.Name, pkgVis)
 					}
@@ -217,7 +217,7 @@ func (c *compiler) mergePackageComponents(ctx context.Context, pkg *Stylesheet, 
 					}
 					pkgVis := getComponentVisibility(pkg, xslElemFunction, key)
 					if !isAcceptVisibilityCompatible(pkgVis, rule.visibility) {
-						return staticError(errCodeXTSE3040,
+						return staticError(lexicon.ErrXTSE3040,
 							"xsl:accept: visibility %q is incompatible with component %q (declared %s)",
 							rule.visibility, key, pkgVis)
 					}
@@ -231,7 +231,7 @@ func (c *compiler) mergePackageComponents(ctx context.Context, pkg *Stylesheet, 
 					}
 					pkgVis := getComponentVisibility(pkg, xslElemVariable, v.Name)
 					if !isAcceptVisibilityCompatible(pkgVis, rule.visibility) {
-						return staticError(errCodeXTSE3040,
+						return staticError(lexicon.ErrXTSE3040,
 							"xsl:accept: visibility %q is incompatible with component %q (declared %s)",
 							rule.visibility, v.Name, pkgVis)
 					}
@@ -260,7 +260,7 @@ func (c *compiler) mergePackageComponents(ctx context.Context, pkg *Stylesheet, 
 					continue
 				}
 				if componentNameMatches(overName, rule.names) {
-					return staticError(errCodeXTSE3051,
+					return staticError(lexicon.ErrXTSE3051,
 						"xsl:accept name %q matches overridden component %q", rule.names, overName)
 				}
 			}
@@ -294,7 +294,7 @@ func (c *compiler) mergePackageComponents(ctx context.Context, pkg *Stylesheet, 
 		// XTSE3050: local template with same name as package component
 		if tmpl.Name != "" {
 			if _, local := c.localTemplateNames[tmpl.Name]; local {
-				return staticError(errCodeXTSE3050,
+				return staticError(lexicon.ErrXTSE3050,
 					"local template %q conflicts with public component from used package", tmpl.Name)
 			}
 		}
@@ -309,7 +309,7 @@ func (c *compiler) mergePackageComponents(ctx context.Context, pkg *Stylesheet, 
 			} else if existing.OwnerPackage != nil && existing.OwnerPackage != pkg {
 				// XTSE3050: two use-packages accept homonymous components
 				// with non-hidden visibility.
-				return staticError(errCodeXTSE3050,
+				return staticError(lexicon.ErrXTSE3050,
 					"template %q accepted from multiple packages with non-hidden visibility",
 					tmpl.Name)
 			}
@@ -348,7 +348,7 @@ func (c *compiler) mergePackageComponents(ctx context.Context, pkg *Stylesheet, 
 		} else if existing.AcceptedFrom != nil && existing.AcceptedFrom != pkg {
 			// XTSE3050: two use-packages accept the same function
 			// with non-hidden visibility.
-			return staticError(errCodeXTSE3050,
+			return staticError(lexicon.ErrXTSE3050,
 				"function %q accepted from multiple packages with non-hidden visibility",
 				key)
 		}
@@ -372,7 +372,7 @@ func (c *compiler) mergePackageComponents(ctx context.Context, pkg *Stylesheet, 
 		}
 		// XTSE3050: local variable with same name as package component
 		if _, local := c.localVarNames[v.Name]; local {
-			return staticError(errCodeXTSE3050,
+			return staticError(lexicon.ErrXTSE3050,
 				"local variable %q conflicts with public component from used package", v.Name)
 		}
 		v.OwnerPackage = pkg
@@ -421,7 +421,7 @@ func (c *compiler) mergePackageComponents(ctx context.Context, pkg *Stylesheet, 
 			}
 			// XTSE3050: local mode with same name as package mode
 			if _, local := c.localModeNames[name]; local {
-				return staticError(errCodeXTSE3050,
+				return staticError(lexicon.ErrXTSE3050,
 					"local mode %q conflicts with public component from used package", name)
 			}
 			if _, exists := c.stylesheet.modeDefs[name]; !exists {

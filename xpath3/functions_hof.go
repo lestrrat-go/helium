@@ -281,7 +281,7 @@ func fnApply(ctx context.Context, args []Sequence) (Sequence, error) {
 		return nil, &XPathError{Code: lexicon.ErrXPTY0004, Message: "apply() second argument must be array"}
 	}
 	if fi.Arity >= 0 && arr.Size() != fi.Arity {
-		return nil, &XPathError{Code: errCodeFOAP0001, Message: fmt.Sprintf("fn:apply: function has arity %d but array has %d members", fi.Arity, arr.Size())}
+		return nil, &XPathError{Code: lexicon.ErrFOAP0001, Message: fmt.Sprintf("fn:apply: function has arity %d but array has %d members", fi.Arity, arr.Size())}
 	}
 	members := arr.members0()
 	fnArgs := make([]Sequence, len(members))

@@ -11,6 +11,7 @@ import (
 	"unicode"
 
 	"github.com/lestrrat-go/helium"
+	"github.com/lestrrat-go/helium/internal/lexicon"
 	"github.com/lestrrat-go/helium/internal/sequence"
 	ixpath "github.com/lestrrat-go/helium/internal/xpath"
 	"github.com/lestrrat-go/helium/xpath3"
@@ -33,26 +34,26 @@ func (ec *execContext) execNumber(ctx context.Context, inst *numberInst) error {
 		}
 		if seqLen == 0 {
 			// XTTE1000: select evaluates to empty sequence
-			return dynamicError(errCodeXTTE1000,
+			return dynamicError(lexicon.ErrXTTE1000,
 				"xsl:number select expression returned empty sequence")
 		}
 		if seqLen > 1 {
 			// XTTE1000: select must return exactly one node
-			return dynamicError(errCodeXTTE1000,
+			return dynamicError(lexicon.ErrXTTE1000,
 				"xsl:number select expression returned more than one item")
 		}
 		if ni, ok := seq.Get(0).(xpath3.NodeItem); ok {
 			node = ni.Node
 		} else {
 			// XTTE0990: select result is not a node
-			return dynamicError(errCodeXTTE0990,
+			return dynamicError(lexicon.ErrXTTE0990,
 				"xsl:number select expression did not return a node")
 		}
 	}
 
 	// XTTE0990: context item must be a node when value is absent
 	if inst.Value == nil && node == nil {
-		return dynamicError(errCodeXTTE0990,
+		return dynamicError(lexicon.ErrXTTE0990,
 			"xsl:number requires a node context when value is not specified")
 	}
 
@@ -75,7 +76,7 @@ func (ec *execContext) execNumber(ctx context.Context, inst *numberInst) error {
 			for item := range sequence.Items(seq) {
 				av, err := xpath3.AtomizeItem(item)
 				if err != nil {
-					return dynamicError(errCodeXTDE0980, "xsl:number value is not numeric")
+					return dynamicError(lexicon.ErrXTDE0980, "xsl:number value is not numeric")
 				}
 				first, have = av, true
 				break
@@ -94,7 +95,7 @@ func (ec *execContext) execNumber(ctx context.Context, inst *numberInst) error {
 				av, err := xpath3.AtomizeItem(item)
 				if err != nil {
 					// XTDE0980: value is not numeric
-					return dynamicError(errCodeXTDE0980,
+					return dynamicError(lexicon.ErrXTDE0980,
 						"xsl:number value is not numeric")
 				}
 				bi, err := atomicToBigInt(av)
@@ -129,7 +130,7 @@ func (ec *execContext) execNumber(ctx context.Context, inst *numberInst) error {
 		}
 		startAt, ok := parseStartAt(saStr)
 		if !ok {
-			return dynamicError(errCodeXTDE0030,
+			return dynamicError(lexicon.ErrXTDE0030,
 				"%q is not a valid value for xsl:number/@start-at", saStr)
 		}
 		one := big.NewInt(1)
@@ -179,7 +180,7 @@ func (ec *execContext) execNumber(ctx context.Context, inst *numberInst) error {
 			return err
 		}
 		if lang != "" && !langRe.MatchString(lang) {
-			return dynamicError(errCodeXTDE0030,
+			return dynamicError(lexicon.ErrXTDE0030,
 				"xsl:number lang attribute is not a valid language code: %q", lang)
 		}
 	}
@@ -533,7 +534,7 @@ func atomicToBigInt(av xpath3.AtomicValue) (*big.Int, error) {
 	case *big.Int:
 		// Integer type — use directly without float64 conversion
 		if v.Sign() < 0 {
-			return nil, dynamicError(errCodeXTDE0980,
+			return nil, dynamicError(lexicon.ErrXTDE0980,
 				"xsl:number value is not a non-negative integer: %v", v)
 		}
 		return new(big.Int).Set(v), nil
@@ -554,7 +555,7 @@ func atomicToBigInt(av xpath3.AtomicValue) (*big.Int, error) {
 			}
 		}
 		if intPart.Sign() < 0 {
-			return nil, dynamicError(errCodeXTDE0980,
+			return nil, dynamicError(lexicon.ErrXTDE0980,
 				"xsl:number value is not a non-negative integer: %v", v)
 		}
 		return intPart, nil
@@ -562,12 +563,12 @@ func atomicToBigInt(av xpath3.AtomicValue) (*big.Int, error) {
 		// Double/float — cast to double first
 		dv, err := xpath3.CastAtomic(av, xpath3.TypeDouble)
 		if err != nil {
-			return nil, dynamicError(errCodeXTDE0980,
+			return nil, dynamicError(lexicon.ErrXTDE0980,
 				"xsl:number value %q cannot be converted to a number", av.StringVal())
 		}
 		f := math.Round(dv.DoubleVal())
 		if math.IsNaN(f) || math.IsInf(f, 0) || f < 0 {
-			return nil, dynamicError(errCodeXTDE0980,
+			return nil, dynamicError(lexicon.ErrXTDE0980,
 				"xsl:number value is not a non-negative integer: %v", dv.DoubleVal())
 		}
 		// Use strconv to get the scientific-notation string, then parse
@@ -577,7 +578,7 @@ func atomicToBigInt(av xpath3.AtomicValue) (*big.Int, error) {
 		s := strconv.FormatFloat(f, 'e', -1, 64)
 		bf, _, err := new(big.Float).SetPrec(512).Parse(s, 10)
 		if err != nil {
-			return nil, dynamicError(errCodeXTDE0980,
+			return nil, dynamicError(lexicon.ErrXTDE0980,
 				"xsl:number value %q cannot be converted to integer", s)
 		}
 		bi, _ := bf.Int(nil)

@@ -176,13 +176,13 @@ func integerArithInt64(op TokenType, a, b int64) (Sequence, error) {
 		return integerArith(op, big.NewInt(a), big.NewInt(b))
 	case TokenDiv:
 		if b == 0 {
-			return nil, &XPathError{Code: errCodeFOAR0001, Message: "division by zero"}
+			return nil, &XPathError{Code: lexicon.ErrFOAR0001, Message: "division by zero"}
 		}
 		r := new(big.Rat).SetFrac64(a, b)
 		return SingleDecimal(r), nil
 	case TokenIdiv:
 		if b == 0 {
-			return nil, &XPathError{Code: errCodeFOAR0001, Message: "integer division by zero"}
+			return nil, &XPathError{Code: lexicon.ErrFOAR0001, Message: "integer division by zero"}
 		}
 		if a == math.MinInt64 && b == -1 {
 			return integerArith(op, big.NewInt(a), big.NewInt(b))
@@ -190,7 +190,7 @@ func integerArithInt64(op TokenType, a, b int64) (Sequence, error) {
 		return SingleInteger(a / b), nil
 	case TokenMod:
 		if b == 0 {
-			return nil, &XPathError{Code: errCodeFOAR0001, Message: "modulo by zero"}
+			return nil, &XPathError{Code: lexicon.ErrFOAR0001, Message: "modulo by zero"}
 		}
 		return SingleInteger(a % b), nil
 	default:
@@ -240,18 +240,18 @@ func integerArith(op TokenType, a, b *big.Int) (Sequence, error) {
 	case TokenDiv:
 		// integer / integer → decimal
 		if b.Sign() == 0 {
-			return nil, &XPathError{Code: errCodeFOAR0001, Message: "division by zero"}
+			return nil, &XPathError{Code: lexicon.ErrFOAR0001, Message: "division by zero"}
 		}
 		r := new(big.Rat).SetFrac(new(big.Int).Set(a), new(big.Int).Set(b))
 		return SingleDecimal(r), nil
 	case TokenIdiv:
 		if b.Sign() == 0 {
-			return nil, &XPathError{Code: errCodeFOAR0001, Message: "integer division by zero"}
+			return nil, &XPathError{Code: lexicon.ErrFOAR0001, Message: "integer division by zero"}
 		}
 		result.Quo(a, b) // truncates toward zero
 	case TokenMod:
 		if b.Sign() == 0 {
-			return nil, &XPathError{Code: errCodeFOAR0001, Message: "modulo by zero"}
+			return nil, &XPathError{Code: lexicon.ErrFOAR0001, Message: "modulo by zero"}
 		}
 		result.Rem(a, b)
 	default:
@@ -271,12 +271,12 @@ func decimalArith(op TokenType, a, b *big.Rat) (Sequence, error) {
 		result.Mul(a, b)
 	case TokenDiv:
 		if b.Sign() == 0 {
-			return nil, &XPathError{Code: errCodeFOAR0001, Message: "division by zero"}
+			return nil, &XPathError{Code: lexicon.ErrFOAR0001, Message: "division by zero"}
 		}
 		result.Quo(a, b)
 	case TokenIdiv:
 		if b.Sign() == 0 {
-			return nil, &XPathError{Code: errCodeFOAR0001, Message: "integer division by zero"}
+			return nil, &XPathError{Code: lexicon.ErrFOAR0001, Message: "integer division by zero"}
 		}
 		// Truncate quotient toward zero
 		q := new(big.Rat).Quo(a, b)
@@ -287,7 +287,7 @@ func decimalArith(op TokenType, a, b *big.Rat) (Sequence, error) {
 		return SingleIntegerBig(intPart), nil
 	case TokenMod:
 		if b.Sign() == 0 {
-			return nil, &XPathError{Code: errCodeFOAR0001, Message: "modulo by zero"}
+			return nil, &XPathError{Code: lexicon.ErrFOAR0001, Message: "modulo by zero"}
 		}
 		// a mod b = a - (a idiv b) * b
 		q := new(big.Rat).Quo(a, b)
@@ -325,13 +325,13 @@ func floatArith(op TokenType, la, ra AtomicValue) (Sequence, error) {
 		result = ln / rn
 	case TokenIdiv:
 		if math.IsNaN(ln) || math.IsNaN(rn) {
-			return nil, &XPathError{Code: errCodeFOAR0002, Message: "idiv with NaN"}
+			return nil, &XPathError{Code: lexicon.ErrFOAR0002, Message: "idiv with NaN"}
 		}
 		if math.IsInf(ln, 0) {
-			return nil, &XPathError{Code: errCodeFOAR0002, Message: "idiv with infinite dividend"}
+			return nil, &XPathError{Code: lexicon.ErrFOAR0002, Message: "idiv with infinite dividend"}
 		}
 		if rn == 0 {
-			return nil, &XPathError{Code: errCodeFOAR0001, Message: "integer division by zero"}
+			return nil, &XPathError{Code: lexicon.ErrFOAR0001, Message: "integer division by zero"}
 		}
 		// Per F&O §6.2.4: finite idiv ±INF = 0 (math.Trunc(finite/Inf) = 0).
 		truncated := math.Trunc(ln / rn)

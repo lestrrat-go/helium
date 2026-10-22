@@ -31,7 +31,7 @@ func (ec *execContext) execApplyTemplates(ctx context.Context, inst *applyTempla
 		// Default select is child::node() which requires a node context item.
 		// If the context item is an atomic value (contextNode is nil), raise XTTE0510.
 		if normalizeNode(ec.contextNode) == nil {
-			return dynamicError(errCodeXTTE0510, "apply-templates with default select requires a node context item")
+			return dynamicError(lexicon.ErrXTTE0510, "apply-templates with default select requires a node context item")
 		}
 		for _, node := range selectDefaultNodes(ec.contextNode) {
 			items = append(items, xpath3.NodeItem{Node: node})
@@ -317,7 +317,7 @@ func (ec *execContext) evaluateWithParam(ctx context.Context, wp *withParam) (xp
 	// Type check against the declared as type
 	if wp.As != "" {
 		st := parseSequenceType(wp.As)
-		checked, err := checkSequenceType(ctx, val, st, errCodeXTTE0570, "with-param $"+wp.Name, ec)
+		checked, err := checkSequenceType(ctx, val, st, lexicon.ErrXTTE0570, "with-param $"+wp.Name, ec)
 		if err != nil {
 			return nil, err
 		}
@@ -354,7 +354,7 @@ func (ec *execContext) execCallTemplate(ctx context.Context, inst *callTemplateI
 	ec.depth++
 	if ec.depth > maxRecursionDepth {
 		ec.depth--
-		return dynamicError(errCodeXTDE0820, "recursion depth exceeded")
+		return dynamicError(lexicon.ErrXTDE0820, "recursion depth exceeded")
 	}
 	defer func() { ec.depth-- }()
 
@@ -365,7 +365,7 @@ func (ec *execContext) execCallTemplate(ctx context.Context, inst *callTemplateI
 
 	tmpl, ok := ec.resolveNamedTemplate(inst.Name)
 	if !ok {
-		return dynamicError(errCodeXTDE0060, "named template %q not found", inst.Name)
+		return dynamicError(lexicon.ErrXTDE0060, "named template %q not found", inst.Name)
 	}
 
 	// XTTE0590: check context-item type constraint
@@ -532,9 +532,9 @@ func (ec *execContext) execCallTemplate(ctx context.Context, inst *callTemplateI
 		// default-handling logic above.
 		if p.As != "" && (val != nil || fromCaller) {
 			st := parseSequenceType(p.As)
-			errCode := errCodeXTTE0570
+			errCode := lexicon.ErrXTTE0570
 			if fromCaller {
-				errCode = errCodeXTTE0590
+				errCode = lexicon.ErrXTTE0590
 			}
 			checked, err := checkSequenceType(ctx, val, st, errCode, "param $"+p.Name, ec)
 			if err != nil {
@@ -556,7 +556,7 @@ func (ec *execContext) execCallTemplate(ctx context.Context, inst *callTemplateI
 func (ec *execContext) execNextMatch(ctx context.Context, inst *nextMatchInst) error {
 	// XTDE0560: xsl:next-match when the current template rule is absent.
 	if ec.currentTemplate == nil || ec.currentTemplate.Match == nil {
-		return dynamicError(errCodeXTDE0560, "xsl:next-match: no current template rule")
+		return dynamicError(lexicon.ErrXTDE0560, "xsl:next-match: no current template rule")
 	}
 	// xsl:next-match: find the next matching template after the current one
 	node := ec.currentNode
@@ -657,7 +657,7 @@ func (ec *execContext) execNextMatch(ctx context.Context, inst *nextMatchInst) e
 					continue
 				}
 				if other.Match != nil && other.Match.matchPattern(ctx, ec, node) {
-					return dynamicError(errCodeXTDE0540,
+					return dynamicError(lexicon.ErrXTDE0540,
 						"ambiguous rule match for node %v in mode %q (on-multiple-match=fail)",
 						node, mode)
 				}
@@ -677,7 +677,7 @@ func (ec *execContext) execApplyImports(ctx context.Context, inst *applyImportsI
 	// A template rule is a template with a match pattern; named templates
 	// invoked via call-template or initial-template don't count.
 	if ec.currentTemplate == nil || ec.currentTemplate.Match == nil {
-		return dynamicError(errCodeXTDE0560, "xsl:apply-imports: no current template rule")
+		return dynamicError(lexicon.ErrXTDE0560, "xsl:apply-imports: no current template rule")
 	}
 
 	node := ec.currentNode
@@ -797,7 +797,7 @@ func (ec *execContext) checkContextItemType(tmpl *template) error {
 
 	// XPDY0002: context item absent when use="required"
 	if len(contextSeq) == 0 && use == ctxItemRequired {
-		return dynamicError(errCodeXPDY0002, "context item is absent but xsl:context-item use=\"required\"")
+		return dynamicError(lexicon.ErrXPDY0002, "context item is absent but xsl:context-item use=\"required\"")
 	}
 
 	// Type check: if as is specified and context item exists, check the type.
@@ -805,7 +805,7 @@ func (ec *execContext) checkContextItemType(tmpl *template) error {
 	if tmpl.ContextItemAs != "" && len(contextSeq) > 0 {
 		asExpr := stripXPathComments(tmpl.ContextItemAs)
 		if !instanceOfItemType(contextSeq[0], asExpr, ec) {
-			return dynamicError(errCodeXTTE0590,
+			return dynamicError(lexicon.ErrXTTE0590,
 				"context item does not match required type %s", asExpr)
 		}
 	}

@@ -257,21 +257,21 @@ func fnUnordered(_ context.Context, args []Sequence) (Sequence, error) {
 
 func fnZeroOrOne(_ context.Context, args []Sequence) (Sequence, error) {
 	if seqLen(args[0]) > 1 {
-		return nil, &XPathError{Code: "FORG0003", Message: fmt.Sprintf("zero-or-one() called with sequence of length %d", seqLen(args[0]))}
+		return nil, &XPathError{Code: lexicon.ErrFORG0003, Message: fmt.Sprintf("zero-or-one() called with sequence of length %d", seqLen(args[0]))}
 	}
 	return args[0], nil
 }
 
 func fnOneOrMore(_ context.Context, args []Sequence) (Sequence, error) {
 	if seqLen(args[0]) == 0 {
-		return nil, &XPathError{Code: "FORG0004", Message: "one-or-more() called with empty sequence"}
+		return nil, &XPathError{Code: lexicon.ErrFORG0004, Message: "one-or-more() called with empty sequence"}
 	}
 	return args[0], nil
 }
 
 func fnExactlyOne(_ context.Context, args []Sequence) (Sequence, error) {
 	if seqLen(args[0]) != 1 {
-		return nil, &XPathError{Code: "FORG0005", Message: fmt.Sprintf("exactly-one() called with sequence of length %d", seqLen(args[0]))}
+		return nil, &XPathError{Code: lexicon.ErrFORG0005, Message: fmt.Sprintf("exactly-one() called with sequence of length %d", seqLen(args[0]))}
 	}
 	return args[0], nil
 }
@@ -341,7 +341,7 @@ func deepEqualItem(a, b Item, opts deepEqualOptions) (bool, error) {
 		return deepEqualArray(av, bv, opts)
 	case FunctionItem:
 		if _, ok := b.(FunctionItem); ok {
-			return false, &XPathError{Code: "FOTY0015", Message: "deep-equal: cannot compare function items"}
+			return false, &XPathError{Code: lexicon.ErrFOTY0015, Message: "deep-equal: cannot compare function items"}
 		}
 		return false, nil
 	default:
@@ -594,7 +594,7 @@ func fnIndexOf(ctx context.Context, args []Sequence) (Sequence, error) {
 func fnLast(ctx context.Context, _ []Sequence) (Sequence, error) {
 	fc := getFnContext(ctx)
 	if fc == nil || (fc.node == nil && fc.contextItem == nil) {
-		return nil, &XPathError{Code: errCodeXPDY0002, Message: "last() requires a focus (context item)"}
+		return nil, &XPathError{Code: lexicon.ErrXPDY0002, Message: "last() requires a focus (context item)"}
 	}
 	return SingleInteger(int64(fc.size)), nil
 }
@@ -602,7 +602,7 @@ func fnLast(ctx context.Context, _ []Sequence) (Sequence, error) {
 func fnPosition(ctx context.Context, _ []Sequence) (Sequence, error) {
 	fc := getFnContext(ctx)
 	if fc == nil || (fc.node == nil && fc.contextItem == nil) {
-		return nil, &XPathError{Code: errCodeXPDY0002, Message: "position() requires a focus (context item)"}
+		return nil, &XPathError{Code: lexicon.ErrXPDY0002, Message: "position() requires a focus (context item)"}
 	}
 	return SingleInteger(int64(fc.position)), nil
 }

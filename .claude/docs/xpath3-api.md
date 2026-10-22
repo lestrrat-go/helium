@@ -395,4 +395,7 @@ element-only complex content), `FOTY0013` (atomization context), `FOAR0001` (div
 (numeric overflow/underflow, e.g. round precision past the non-terminating cap), `FOAY0001` (array index out
 of bounds), `FOMX0001` (map duplicate key reject).
 
+Code strings come from the `lexicon.ErrXXXX` constants in `internal/lexicon/errcode.go`. Production code and tests
+(including external `xpath3_test` files) use those constants instead of raw string literals.
+
 `try-catch` matches `*XPathError` by code. Non-`*XPathError` errors propagate through unchanged.

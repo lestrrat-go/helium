@@ -53,10 +53,10 @@ func fnJSONToXML(ctx context.Context, args []Sequence) (Sequence, error) {
 	var extra json.Token
 	extra, err = dec.Token()
 	if err == nil {
-		return nil, &XPathError{Code: errCodeFOJS0001, Message: fmt.Sprintf("unexpected trailing content after JSON value: %v", extra)}
+		return nil, &XPathError{Code: lexicon.ErrFOJS0001, Message: fmt.Sprintf("unexpected trailing content after JSON value: %v", extra)}
 	}
 	if !errors.Is(err, io.EOF) {
-		return nil, &XPathError{Code: errCodeFOJS0001, Message: fmt.Sprintf("invalid trailing content: %v", err)}
+		return nil, &XPathError{Code: lexicon.ErrFOJS0001, Message: fmt.Sprintf("invalid trailing content: %v", err)}
 	}
 
 	ec := getFnContext(ctx)
@@ -81,7 +81,7 @@ func fnJSONToXML(ctx context.Context, args []Sequence) (Sequence, error) {
 		return nil, err
 	}
 	if err := doc.SetDocumentElement(root); err != nil {
-		return nil, &XPathError{Code: errCodeFOER0000, Message: fmt.Sprintf("json-to-xml: failed to build result: %v", err)}
+		return nil, &XPathError{Code: lexicon.ErrFOER0000, Message: fmt.Sprintf("json-to-xml: failed to build result: %v", err)}
 	}
 
 	if opts.validate && ec != nil && len(annotations) > 0 {
@@ -164,10 +164,10 @@ func buildJSONToXMLTree(doc *helium.Document, item Item, opts jsonOptions, annot
 	// when serialized in isolation. Redundant declarations on descendants are
 	// namespace-equivalent to the root-only form.
 	if err := elem.DeclareNamespace("", NSFn); err != nil {
-		return nil, &XPathError{Code: errCodeFOER0000, Message: fmt.Sprintf("json-to-xml: failed to build result: %v", err)}
+		return nil, &XPathError{Code: lexicon.ErrFOER0000, Message: fmt.Sprintf("json-to-xml: failed to build result: %v", err)}
 	}
 	if err := elem.SetActiveNamespace("", NSFn); err != nil {
-		return nil, &XPathError{Code: errCodeFOER0000, Message: fmt.Sprintf("json-to-xml: failed to build result: %v", err)}
+		return nil, &XPathError{Code: lexicon.ErrFOER0000, Message: fmt.Sprintf("json-to-xml: failed to build result: %v", err)}
 	}
 
 	switch v := item.(type) {
@@ -178,7 +178,7 @@ func buildJSONToXMLTree(doc *helium.Document, item Item, opts jsonOptions, annot
 		// 1000000000000), and never the canonical xs:double, per F&O 3.1 (bug
 		// 28179).
 		if err := elem.AppendText([]byte(v.lexical)); err != nil {
-			return nil, &XPathError{Code: errCodeFOER0000, Message: fmt.Sprintf("json-to-xml: failed to append numeric value: %v", err)}
+			return nil, &XPathError{Code: lexicon.ErrFOER0000, Message: fmt.Sprintf("json-to-xml: failed to append numeric value: %v", err)}
 		}
 	case MapItem:
 		if err := v.forEach0(func(key AtomicValue, value Sequence) error {
@@ -196,7 +196,7 @@ func buildJSONToXMLTree(doc *helium.Document, item Item, opts jsonOptions, annot
 				_ = child.SetAttribute("escaped-key", lexicon.ValueTrue)
 			}
 			if err := elem.AddChild(child); err != nil {
-				return &XPathError{Code: errCodeFOER0000, Message: fmt.Sprintf("json-to-xml: failed to attach child: %v", err)}
+				return &XPathError{Code: lexicon.ErrFOER0000, Message: fmt.Sprintf("json-to-xml: failed to attach child: %v", err)}
 			}
 			return nil
 		}); err != nil {
@@ -209,7 +209,7 @@ func buildJSONToXMLTree(doc *helium.Document, item Item, opts jsonOptions, annot
 				return nil, err
 			}
 			if err := elem.AddChild(child); err != nil {
-				return nil, &XPathError{Code: errCodeFOER0000, Message: fmt.Sprintf("json-to-xml: failed to attach child: %v", err)}
+				return nil, &XPathError{Code: lexicon.ErrFOER0000, Message: fmt.Sprintf("json-to-xml: failed to attach child: %v", err)}
 			}
 		}
 	case AtomicValue:
@@ -224,7 +224,7 @@ func buildJSONToXMLTree(doc *helium.Document, item Item, opts jsonOptions, annot
 				_ = elem.SetAttribute("escaped", lexicon.ValueTrue)
 			}
 			if err := elem.AppendText([]byte(v.StringVal())); err != nil {
-				return nil, &XPathError{Code: errCodeFOER0000, Message: fmt.Sprintf("json-to-xml: failed to append string value: %v", err)}
+				return nil, &XPathError{Code: lexicon.ErrFOER0000, Message: fmt.Sprintf("json-to-xml: failed to append string value: %v", err)}
 			}
 		case TypeBoolean:
 			text := lexicon.ValueFalse
@@ -232,19 +232,19 @@ func buildJSONToXMLTree(doc *helium.Document, item Item, opts jsonOptions, annot
 				text = lexicon.ValueTrue
 			}
 			if err := elem.AppendText([]byte(text)); err != nil {
-				return nil, &XPathError{Code: errCodeFOER0000, Message: fmt.Sprintf("json-to-xml: failed to append boolean value: %v", err)}
+				return nil, &XPathError{Code: lexicon.ErrFOER0000, Message: fmt.Sprintf("json-to-xml: failed to append boolean value: %v", err)}
 			}
 		default:
 			text, err := atomicToString(v)
 			if err != nil {
-				return nil, &XPathError{Code: errCodeFOER0000, Message: fmt.Sprintf("json-to-xml: failed to format numeric value: %v", err)}
+				return nil, &XPathError{Code: lexicon.ErrFOER0000, Message: fmt.Sprintf("json-to-xml: failed to format numeric value: %v", err)}
 			}
 			if err := elem.AppendText([]byte(text)); err != nil {
-				return nil, &XPathError{Code: errCodeFOER0000, Message: fmt.Sprintf("json-to-xml: failed to append numeric value: %v", err)}
+				return nil, &XPathError{Code: lexicon.ErrFOER0000, Message: fmt.Sprintf("json-to-xml: failed to append numeric value: %v", err)}
 			}
 		}
 	default:
-		return nil, &XPathError{Code: errCodeFOER0000, Message: fmt.Sprintf("json-to-xml: unsupported item type %T", item)}
+		return nil, &XPathError{Code: lexicon.ErrFOER0000, Message: fmt.Sprintf("json-to-xml: unsupported item type %T", item)}
 	}
 
 	return elem, nil
@@ -338,9 +338,9 @@ func parseJSONToXMLOptions(ctx context.Context, args []Sequence) (jsonOptions, e
 		case duplicatesReject, duplicatesUseFirst, "retain":
 			opts.duplicates = s
 		case "use-last":
-			return opts, &XPathError{Code: errCodeFOJS0005, Message: "option 'duplicates' must not be 'use-last' for json-to-xml"}
+			return opts, &XPathError{Code: lexicon.ErrFOJS0005, Message: "option 'duplicates' must not be 'use-last' for json-to-xml"}
 		default:
-			return opts, &XPathError{Code: errCodeFOJS0005, Message: fmt.Sprintf("invalid value for 'duplicates' option: %q", s)}
+			return opts, &XPathError{Code: lexicon.ErrFOJS0005, Message: fmt.Sprintf("invalid value for 'duplicates' option: %q", s)}
 		}
 	}
 
@@ -357,7 +357,7 @@ func parseJSONToXMLOptions(ctx context.Context, args []Sequence) (jsonOptions, e
 	// validate=true() with duplicates='retain' cannot succeed: validation
 	// against the json result schema requires unique keys (FOJS0005).
 	if opts.validate && opts.duplicates == "retain" {
-		return opts, &XPathError{Code: errCodeFOJS0005, Message: "json-to-xml: 'validate' cannot be combined with duplicates='retain'"}
+		return opts, &XPathError{Code: lexicon.ErrFOJS0005, Message: "json-to-xml: 'validate' cannot be combined with duplicates='retain'"}
 	}
 
 	fbKey := AtomicValue{TypeName: TypeString, Value: "fallback"}
@@ -376,7 +376,7 @@ func parseJSONToXMLOptions(ctx context.Context, args []Sequence) (jsonOptions, e
 	}
 
 	if opts.escape && opts.fallback != nil {
-		return opts, &XPathError{Code: errCodeFOJS0005, Message: "fallback cannot be combined with escape=true()"}
+		return opts, &XPathError{Code: lexicon.ErrFOJS0005, Message: "fallback cannot be combined with escape=true()"}
 	}
 
 	return opts, nil
@@ -461,7 +461,7 @@ func xmlToJSONRootElement(node helium.Node) (*helium.Element, error) {
 	case *helium.Document:
 		root := n.DocumentElement()
 		if root == nil {
-			return nil, &XPathError{Code: errCodeFOJS0006, Message: "xml-to-json: document has no document element"}
+			return nil, &XPathError{Code: lexicon.ErrFOJS0006, Message: "xml-to-json: document has no document element"}
 		}
 		// FOJS0006: document must have exactly one element child.
 		elemCount := 0
@@ -471,7 +471,7 @@ func xmlToJSONRootElement(node helium.Node) (*helium.Element, error) {
 			}
 		}
 		if elemCount != 1 {
-			return nil, &XPathError{Code: errCodeFOJS0006, Message: "xml-to-json: document must have exactly one element child"}
+			return nil, &XPathError{Code: lexicon.ErrFOJS0006, Message: "xml-to-json: document must have exactly one element child"}
 		}
 		return root, nil
 	case *helium.Element:
@@ -501,10 +501,10 @@ func serializeJSONXMLElement(elem *helium.Element, inherited xmlJSONInherited, o
 				return "", xmlJSONMeta{}, err
 			}
 			if !childMeta.hasKey {
-				return "", xmlJSONMeta{}, &XPathError{Code: errCodeFOJS0006, Message: "xml-to-json: map child is missing key attribute"}
+				return "", xmlJSONMeta{}, &XPathError{Code: lexicon.ErrFOJS0006, Message: "xml-to-json: map child is missing key attribute"}
 			}
 			if _, exists := seen[childMeta.keyActual]; exists {
-				return "", xmlJSONMeta{}, &XPathError{Code: errCodeFOJS0006, Message: fmt.Sprintf("xml-to-json: duplicate key %q", childMeta.keyActual)}
+				return "", xmlJSONMeta{}, &XPathError{Code: lexicon.ErrFOJS0006, Message: fmt.Sprintf("xml-to-json: duplicate key %q", childMeta.keyActual)}
 			}
 			seen[childMeta.keyActual] = struct{}{}
 			parts = append(parts, `"`+childMeta.keyEncoded+`":`+valueSeparator(opts.indent)+value)
@@ -563,13 +563,13 @@ func serializeJSONXMLElement(elem *helium.Element, inherited xmlJSONInherited, o
 		}
 		return jsonKindNull, meta, nil
 	default:
-		return "", xmlJSONMeta{}, &XPathError{Code: errCodeFOJS0006, Message: fmt.Sprintf("xml-to-json: unsupported element %s", meta.kind)}
+		return "", xmlJSONMeta{}, &XPathError{Code: lexicon.ErrFOJS0006, Message: fmt.Sprintf("xml-to-json: unsupported element %s", meta.kind)}
 	}
 }
 
 func parseXMLJSONMeta(elem *helium.Element, inherited xmlJSONInherited) (xmlJSONMeta, error) {
 	if elem.URI() != NSFn {
-		return xmlJSONMeta{}, &XPathError{Code: errCodeFOJS0006, Message: fmt.Sprintf("xml-to-json: invalid namespace %q", elem.URI())}
+		return xmlJSONMeta{}, &XPathError{Code: lexicon.ErrFOJS0006, Message: fmt.Sprintf("xml-to-json: invalid namespace %q", elem.URI())}
 	}
 
 	meta := xmlJSONMeta{
@@ -580,7 +580,7 @@ func parseXMLJSONMeta(elem *helium.Element, inherited xmlJSONInherited) (xmlJSON
 	switch meta.kind {
 	case jsonKindMap, jsonKindArray, lexicon.TypeString, "number", "boolean", jsonKindNull:
 	default:
-		return xmlJSONMeta{}, &XPathError{Code: errCodeFOJS0006, Message: fmt.Sprintf("xml-to-json: invalid element %q", meta.kind)}
+		return xmlJSONMeta{}, &XPathError{Code: lexicon.ErrFOJS0006, Message: fmt.Sprintf("xml-to-json: invalid element %q", meta.kind)}
 	}
 
 	for _, attr := range elem.Attributes() {
@@ -603,10 +603,10 @@ func parseXMLJSONMeta(elem *helium.Element, inherited xmlJSONInherited) (xmlJSON
 				}
 				meta.inherited.escapedKey = v
 			default:
-				return xmlJSONMeta{}, &XPathError{Code: errCodeFOJS0006, Message: fmt.Sprintf("xml-to-json: invalid attribute %q", attr.Name())}
+				return xmlJSONMeta{}, &XPathError{Code: lexicon.ErrFOJS0006, Message: fmt.Sprintf("xml-to-json: invalid attribute %q", attr.Name())}
 			}
 		case NSFn:
-			return xmlJSONMeta{}, &XPathError{Code: errCodeFOJS0006, Message: fmt.Sprintf("xml-to-json: invalid attribute namespace for %q", attr.Name())}
+			return xmlJSONMeta{}, &XPathError{Code: lexicon.ErrFOJS0006, Message: fmt.Sprintf("xml-to-json: invalid attribute namespace for %q", attr.Name())}
 		default:
 			// Attributes in other namespaces are ignored.
 		}
@@ -639,12 +639,12 @@ func jsonElementChildren(elem *helium.Element, insideMap bool) ([]*helium.Elemen
 				if insideMap {
 					kind = jsonKindMap
 				}
-				return nil, &XPathError{Code: errCodeFOJS0006, Message: fmt.Sprintf("xml-to-json: %s contains non-whitespace text", kind)}
+				return nil, &XPathError{Code: lexicon.ErrFOJS0006, Message: fmt.Sprintf("xml-to-json: %s contains non-whitespace text", kind)}
 			}
 		case *helium.Comment, *helium.ProcessingInstruction:
 			continue
 		default:
-			return nil, &XPathError{Code: errCodeFOJS0006, Message: "xml-to-json: invalid child node"}
+			return nil, &XPathError{Code: lexicon.ErrFOJS0006, Message: "xml-to-json: invalid child node"}
 		}
 	}
 	return children, nil
@@ -658,12 +658,12 @@ func scalarElementText(elem *helium.Element, allowComments bool) (string, error)
 			b.Write(child.Content())
 		case helium.CommentNode, helium.ProcessingInstructionNode:
 			if !allowComments {
-				return "", &XPathError{Code: errCodeFOJS0006, Message: "xml-to-json: invalid child node"}
+				return "", &XPathError{Code: lexicon.ErrFOJS0006, Message: "xml-to-json: invalid child node"}
 			}
 		case helium.ElementNode:
-			return "", &XPathError{Code: errCodeFOJS0006, Message: "xml-to-json: scalar value contains element children"}
+			return "", &XPathError{Code: lexicon.ErrFOJS0006, Message: "xml-to-json: scalar value contains element children"}
 		default:
-			return "", &XPathError{Code: errCodeFOJS0006, Message: "xml-to-json: invalid child node"}
+			return "", &XPathError{Code: lexicon.ErrFOJS0006, Message: "xml-to-json: invalid child node"}
 		}
 	}
 	return b.String(), nil
@@ -674,14 +674,14 @@ func validateNullElement(elem *helium.Element) error {
 		switch child.Type() {
 		case helium.TextNode, helium.CDATASectionNode:
 			if strings.TrimSpace(string(child.Content())) != "" {
-				return &XPathError{Code: errCodeFOJS0006, Message: "xml-to-json: null element must not contain text"}
+				return &XPathError{Code: lexicon.ErrFOJS0006, Message: "xml-to-json: null element must not contain text"}
 			}
 		case helium.CommentNode, helium.ProcessingInstructionNode:
 			continue
 		case helium.ElementNode:
-			return &XPathError{Code: errCodeFOJS0006, Message: "xml-to-json: null element must not contain child elements"}
+			return &XPathError{Code: lexicon.ErrFOJS0006, Message: "xml-to-json: null element must not contain child elements"}
 		default:
-			return &XPathError{Code: errCodeFOJS0006, Message: "xml-to-json: invalid child node"}
+			return &XPathError{Code: lexicon.ErrFOJS0006, Message: "xml-to-json: invalid child node"}
 		}
 	}
 	return nil
@@ -694,7 +694,7 @@ func parseXMLJSONBooleanAttr(s string) (bool, error) {
 	case lexicon.ValueFalse, "0":
 		return false, nil
 	default:
-		return false, &XPathError{Code: errCodeFOJS0006, Message: fmt.Sprintf("xml-to-json: invalid boolean attribute value %q", s)}
+		return false, &XPathError{Code: lexicon.ErrFOJS0006, Message: fmt.Sprintf("xml-to-json: invalid boolean attribute value %q", s)}
 	}
 }
 
@@ -705,22 +705,22 @@ func canonicalizeXMLJSONBoolean(s string) (string, error) {
 	case lexicon.ValueFalse, "0":
 		return lexicon.ValueFalse, nil
 	default:
-		return "", &XPathError{Code: errCodeFOJS0006, Message: fmt.Sprintf("xml-to-json: invalid boolean value %q", s)}
+		return "", &XPathError{Code: lexicon.ErrFOJS0006, Message: fmt.Sprintf("xml-to-json: invalid boolean value %q", s)}
 	}
 }
 
 func canonicalizeXMLJSONNumber(s string) (string, error) {
 	norm := strings.TrimSpace(s)
 	if norm == "" {
-		return "", &XPathError{Code: errCodeFOJS0006, Message: "xml-to-json: invalid number value"}
+		return "", &XPathError{Code: lexicon.ErrFOJS0006, Message: "xml-to-json: invalid number value"}
 	}
 	if strings.EqualFold(norm, "nan") || strings.Contains(strings.ToUpper(norm), "INF") {
-		return "", &XPathError{Code: errCodeFOJS0006, Message: fmt.Sprintf("xml-to-json: invalid number value %q", s)}
+		return "", &XPathError{Code: lexicon.ErrFOJS0006, Message: fmt.Sprintf("xml-to-json: invalid number value %q", s)}
 	}
 	norm = preprocessXMLJSONNumber(norm)
 	av, err := CastFromString(norm, TypeDouble)
 	if err != nil {
-		return "", &XPathError{Code: errCodeFOJS0006, Message: fmt.Sprintf("xml-to-json: invalid number value %q", s)}
+		return "", &XPathError{Code: lexicon.ErrFOJS0006, Message: fmt.Sprintf("xml-to-json: invalid number value %q", s)}
 	}
 	return formatXPathDouble(av.DoubleVal()), nil
 }
@@ -779,7 +779,7 @@ func validateEscapedJSONContent(s string) (string, string, error) {
 		}
 
 		if i+1 >= len(s) {
-			return "", "", &XPathError{Code: errCodeFOJS0007, Message: "xml-to-json: invalid trailing backslash in escaped string"}
+			return "", "", &XPathError{Code: lexicon.ErrFOJS0007, Message: "xml-to-json: invalid trailing backslash in escaped string"}
 		}
 
 		switch s[i+1] {
@@ -824,7 +824,7 @@ func validateEscapedJSONContent(s string) (string, string, error) {
 			decoded.WriteString(actual)
 			i += consumed
 		default:
-			return "", "", &XPathError{Code: errCodeFOJS0007, Message: fmt.Sprintf("xml-to-json: invalid escape sequence \\%c", s[i+1])}
+			return "", "", &XPathError{Code: lexicon.ErrFOJS0007, Message: fmt.Sprintf("xml-to-json: invalid escape sequence \\%c", s[i+1])}
 		}
 	}
 
@@ -833,10 +833,10 @@ func validateEscapedJSONContent(s string) (string, string, error) {
 
 func parseEscapedUnicodeSequence(s string) (string, string, int, error) {
 	if len(s) < 6 {
-		return "", "", 0, &XPathError{Code: errCodeFOJS0007, Message: "xml-to-json: incomplete \\u escape"}
+		return "", "", 0, &XPathError{Code: lexicon.ErrFOJS0007, Message: "xml-to-json: incomplete \\u escape"}
 	}
 	if s[0] != '\\' || s[1] != 'u' || !isHexQuad(s[2:6]) {
-		return "", "", 0, &XPathError{Code: errCodeFOJS0007, Message: "xml-to-json: invalid \\u escape"}
+		return "", "", 0, &XPathError{Code: lexicon.ErrFOJS0007, Message: "xml-to-json: invalid \\u escape"}
 	}
 	cp, _ := parseJSONHexEscape(s[2:6])
 	encoded := s[:6]
@@ -844,16 +844,16 @@ func parseEscapedUnicodeSequence(s string) (string, string, int, error) {
 	switch {
 	case cp >= 0xD800 && cp <= 0xDBFF:
 		if len(s) < 12 || s[6] != '\\' || s[7] != 'u' || !isHexQuad(s[8:12]) {
-			return "", "", 0, &XPathError{Code: errCodeFOJS0007, Message: "xml-to-json: invalid surrogate pair"}
+			return "", "", 0, &XPathError{Code: lexicon.ErrFOJS0007, Message: "xml-to-json: invalid surrogate pair"}
 		}
 		cp2, _ := parseJSONHexEscape(s[8:12])
 		if cp2 < 0xDC00 || cp2 > 0xDFFF {
-			return "", "", 0, &XPathError{Code: errCodeFOJS0007, Message: "xml-to-json: invalid surrogate pair"}
+			return "", "", 0, &XPathError{Code: lexicon.ErrFOJS0007, Message: "xml-to-json: invalid surrogate pair"}
 		}
 		r := rune(((cp - 0xD800) << 10) + (cp2 - 0xDC00) + 0x10000)
 		return encoded + s[6:12], string(r), 12, nil
 	case cp >= 0xDC00 && cp <= 0xDFFF:
-		return "", "", 0, &XPathError{Code: errCodeFOJS0007, Message: "xml-to-json: invalid low surrogate"}
+		return "", "", 0, &XPathError{Code: lexicon.ErrFOJS0007, Message: "xml-to-json: invalid low surrogate"}
 	default:
 		return encoded, string(rune(cp)), 6, nil
 	}

@@ -129,7 +129,7 @@ func resolveSortOrder(ctx context.Context, ec *execContext, sk *sortKey) (string
 			return "", err
 		}
 		if order != sortOrderAscending && order != sortOrderDescending {
-			return "", dynamicError(errCodeXTDE0030,
+			return "", dynamicError(lexicon.ErrXTDE0030,
 				"invalid order %q in xsl:sort; must be \"ascending\" or \"descending\"", order)
 		}
 	}
@@ -154,7 +154,7 @@ func buildResolvedSort(ctx context.Context, ec *execContext, sortKeys []*sortKey
 			}
 			cmpFn, err := xpath3.ResolveCollationCompareFunc(uri)
 			if err != nil {
-				return resolvedSort{}, dynamicError(errCodeXTDE1035,
+				return resolvedSort{}, dynamicError(lexicon.ErrXTDE1035,
 					"unknown collation URI %q", uri)
 			}
 			levels[i].compare = cmpFn
@@ -186,7 +186,7 @@ func resolveLevel1(ctx context.Context, ec *execContext, sk *sortKey) (resolvedL
 			return resolvedLevel{}, err
 		}
 		if !isValidLanguageTag(lang) {
-			return resolvedLevel{}, dynamicError(errCodeXTDE0030,
+			return resolvedLevel{}, dynamicError(lexicon.ErrXTDE0030,
 				"invalid language tag %q in xsl:sort", lang)
 		}
 	}
@@ -198,7 +198,7 @@ func resolveLevel1(ctx context.Context, ec *execContext, sk *sortKey) (resolvedL
 		}
 		cmpFn, err := xpath3.ResolveCollationCompareFunc(uri)
 		if err != nil {
-			return resolvedLevel{}, dynamicError(errCodeXTDE1035,
+			return resolvedLevel{}, dynamicError(lexicon.ErrXTDE1035,
 				"unknown collation URI %q", uri)
 		}
 		rl.compare = cmpFn
@@ -243,7 +243,7 @@ func buildImplicitCollationURI(ctx context.Context, ec *execContext, sk *sortKey
 		case "lower-first":
 			params = append(params, "caseFirst=lower")
 		default:
-			return "", dynamicError(errCodeXTDE0030,
+			return "", dynamicError(lexicon.ErrXTDE0030,
 				"invalid case-order %q in xsl:sort; must be \"upper-first\" or \"lower-first\"", co)
 		}
 	}
@@ -266,7 +266,7 @@ func validateSortKeyAttrs(ctx context.Context, ec *execContext, sk *sortKey) err
 			return err
 		}
 		if !isValidSortDataType(dt) {
-			return dynamicError(errCodeXTDE0030,
+			return dynamicError(lexicon.ErrXTDE0030,
 				"invalid data-type %q in xsl:sort; must be \"text\", \"number\", or a QName", dt)
 		}
 	}
@@ -276,7 +276,7 @@ func validateSortKeyAttrs(ctx context.Context, ec *execContext, sk *sortKey) err
 			return err
 		}
 		if co != "upper-first" && co != "lower-first" {
-			return dynamicError(errCodeXTDE0030,
+			return dynamicError(lexicon.ErrXTDE0030,
 				"invalid case-order %q in xsl:sort; must be \"upper-first\" or \"lower-first\"", co)
 		}
 	}
@@ -286,7 +286,7 @@ func validateSortKeyAttrs(ctx context.Context, ec *execContext, sk *sortKey) err
 			return err
 		}
 		if !isValidLanguageTag(lang) {
-			return dynamicError(errCodeXTDE0030,
+			return dynamicError(lexicon.ErrXTDE0030,
 				"invalid language tag %q in xsl:sort", lang)
 		}
 	}
@@ -299,7 +299,7 @@ func validateSortKeyAttrs(ctx context.Context, ec *execContext, sk *sortKey) err
 		// validated for conformance but does not change sort behavior
 		// (honoring stable="no" via an unstable sort is out of scope).
 		if _, ok := parseXSDBool(stable); !ok {
-			return dynamicError(errCodeXTDE0030,
+			return dynamicError(lexicon.ErrXTDE0030,
 				"invalid stable %q in xsl:sort; must be a valid xs:boolean", stable)
 		}
 	}
@@ -309,7 +309,7 @@ func validateSortKeyAttrs(ctx context.Context, ec *execContext, sk *sortKey) err
 			return err
 		}
 		if _, err := xpath3.ResolveCollationCompareFunc(uri); err != nil {
-			return dynamicError(errCodeXTDE1035,
+			return dynamicError(lexicon.ErrXTDE1035,
 				"unknown collation URI %q", uri)
 		}
 	}
@@ -353,7 +353,7 @@ func validateSortLevelTypes(values []sortValue, mode dataTypeMode) error {
 		}
 		// xs:duration is only partially ordered and cannot be used as a sort key.
 		if v.atom.TypeName == xpath3.TypeDuration {
-			return dynamicError(errCodeXTDE1030,
+			return dynamicError(lexicon.ErrXTDE1030,
 				"sort keys of type %s are only partially ordered", xpath3.TypeDuration)
 		}
 		if ref == nil {
@@ -361,7 +361,7 @@ func validateSortLevelTypes(values []sortValue, mode dataTypeMode) error {
 			continue
 		}
 		if !sortKeyTypesComparable(*ref, v.atom) {
-			return dynamicError(errCodeXTDE1030,
+			return dynamicError(lexicon.ErrXTDE1030,
 				"sort keys have incompatible types: %s and %s", ref.TypeName, v.atom.TypeName)
 		}
 	}
@@ -562,13 +562,13 @@ func evaluateSortKey(ctx context.Context, ec *execContext, sk *sortKey, node hel
 		} else {
 			r, e := ec.evalXPath(ctx, sk.Select, node)
 			if e != nil {
-				return sortValue{}, dynamicError(errCodeXTDE0700, "sort key evaluation error: %v", e)
+				return sortValue{}, dynamicError(lexicon.ErrXTDE0700, "sort key evaluation error: %v", e)
 			}
 			result = *r
 			err = nil
 		}
 		if err != nil {
-			return sortValue{}, dynamicError(errCodeXTDE0700, "sort key evaluation error: %v", err)
+			return sortValue{}, dynamicError(lexicon.ErrXTDE0700, "sort key evaluation error: %v", err)
 		}
 
 		seq := result.Sequence()
@@ -588,7 +588,7 @@ func evaluateSortKey(ctx context.Context, ec *execContext, sk *sortKey, node hel
 			seqLen = 1
 		}
 		if seqLen > 1 {
-			return sortValue{}, dynamicError(errCodeXTTE1020,
+			return sortValue{}, dynamicError(lexicon.ErrXTTE1020,
 				"sort key value is a sequence of %d items; a single value is required", seqLen)
 		}
 
@@ -647,7 +647,7 @@ func evaluateSortKey(ctx context.Context, ec *execContext, sk *sortKey, node hel
 	ec.currentNode = savedCurrent
 	ec.contextNode = savedContext
 	if err != nil {
-		return sortValue{}, dynamicError(errCodeXTDE0700, "sort key evaluation error: %v", err)
+		return sortValue{}, dynamicError(lexicon.ErrXTDE0700, "sort key evaluation error: %v", err)
 	}
 
 	implicitTZBody := ec.currentTime.Location()

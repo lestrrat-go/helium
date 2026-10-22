@@ -204,8 +204,8 @@ func (ec *execContext) execLiteralResultElement(ctx context.Context, inst *liter
 	if inst.TypeName != "" {
 		if err := ec.validateAndNormalizeElementContent(ctx, elem, inst.TypeName); err != nil {
 			// Convert XTTE1510 to XTTE1540 for xsl:type on LRE.
-			if xsltErr, ok := errors.AsType[*XSLTError](err); ok && xsltErr.Code == errCodeXTTE1510 {
-				return dynamicError(errCodeXTTE1540,
+			if xsltErr, ok := errors.AsType[*XSLTError](err); ok && xsltErr.Code == lexicon.ErrXTTE1510 {
+				return dynamicError(lexicon.ErrXTTE1540,
 					"element content does not match declared type %s: %v", inst.TypeName, xsltErr.Message)
 			}
 			return err
@@ -279,12 +279,12 @@ func (ec *execContext) applyOneAttributeSet(ctx context.Context, asDef *attribut
 	name := asDef.Name
 
 	if asDef.Visibility == visAbstract || asDef.Visibility == visHidden {
-		return dynamicError(errCodeXTDE3052,
+		return dynamicError(lexicon.ErrXTDE3052,
 			"abstract attribute-set %q was invoked without being overridden", name)
 	}
 
 	if _, ok := active[name]; ok {
-		return dynamicError(errCodeXTSE0720,
+		return dynamicError(lexicon.ErrXTSE0720,
 			"attribute-set %q has a circular use-attribute-sets reference (runtime)", name)
 	}
 	active[name] = struct{}{}

@@ -324,7 +324,7 @@ func (p *parser) tryParseDirectNodeTest(axis AxisType) (NodeTest, bool, error) {
 		uri := tok.Value[2:idx]
 		local := tok.Value[idx+1:]
 		if uri == lexicon.NamespaceXMLNS {
-			return nil, false, &XPathError{Code: errCodeXPST0081, Message: "the xmlns namespace URI cannot be used in name tests"}
+			return nil, false, &XPathError{Code: lexicon.ErrXPST0081, Message: "the xmlns namespace URI cannot be used in name tests"}
 		}
 		p.lexer.Next()
 		return NameTest{URI: uri, Local: local}, true, nil

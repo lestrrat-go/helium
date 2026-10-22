@@ -1,0 +1,80 @@
+package lexicon
+
+// W3C error codes (XPath 3.1, Functions and Operators 3.1, Serialization 3.1)
+// as they appear in xpath3.XPathError.Code, without the "err:" prefix.
+const (
+	ErrFOAP0001 = "FOAP0001"
+	ErrFOAR0001 = "FOAR0001"
+	ErrFOAR0002 = "FOAR0002"
+	ErrFOAY0001 = "FOAY0001"
+	ErrFOCA0002 = "FOCA0002"
+	ErrFOCA0005 = "FOCA0005"
+	ErrFOCH0001 = "FOCH0001"
+	ErrFOCH0002 = "FOCH0002"
+	ErrFOCH0003 = "FOCH0003"
+	ErrFODC0001 = "FODC0001"
+	ErrFODC0002 = "FODC0002" // document() / xsl:source-document load or parse error
+	ErrFODC0004 = "FODC0004"
+	ErrFODC0005 = "FODC0005"
+	ErrFODC0006 = "FODC0006"
+	ErrFODF1280 = "FODF1280"
+	ErrFODF1310 = "FODF1310"
+	ErrFODT0001 = "FODT0001"
+	ErrFODT0002 = "FODT0002"
+	ErrFODT0003 = "FODT0003"
+	ErrFOER0000 = "FOER0000"
+	ErrFOFD1340 = "FOFD1340"
+	ErrFOFD1350 = "FOFD1350"
+	ErrFOJS0001 = "FOJS0001"
+	ErrFOJS0003 = "FOJS0003"
+	ErrFOJS0005 = "FOJS0005"
+	ErrFOJS0006 = "FOJS0006"
+	ErrFOJS0007 = "FOJS0007"
+	ErrFONS0004 = "FONS0004"
+	ErrFORG0001 = "FORG0001"
+	ErrFORG0002 = "FORG0002"
+	ErrFORG0003 = "FORG0003"
+	ErrFORG0004 = "FORG0004"
+	ErrFORG0005 = "FORG0005"
+	ErrFORG0006 = "FORG0006"
+	ErrFORG0008 = "FORG0008"
+	ErrFORG0010 = "FORG0010"
+	ErrFORX0001 = "FORX0001"
+	ErrFORX0002 = "FORX0002"
+	ErrFORX0003 = "FORX0003"
+	ErrFORX0004 = "FORX0004"
+	ErrFOTY0012 = "FOTY0012"
+	ErrFOTY0013 = "FOTY0013" // atomization of map/function items
+	ErrFOTY0014 = "FOTY0014"
+	ErrFOTY0015 = "FOTY0015"
+	ErrFOUT1170 = "FOUT1170"
+	ErrFOXT0001 = "FOXT0001" // fn:transform invalid argument shape
+	ErrFOXT0002 = "FOXT0002" // fn:transform missing required option or resolver
+	ErrFOXT0003 = "FOXT0003" // fn:transform stylesheet/package/serialization failure
+	ErrFOXT0004 = "FOXT0004" // fn:transform recursion depth exceeded
+	ErrFOXT0006 = "FOXT0006" // fn:transform requested property cannot be satisfied
+	ErrSENR0001 = "SENR0001"
+	ErrSEPM0004 = "SEPM0004" // version/standalone constraint violation
+	ErrSEPM0009 = "SEPM0009" // omit-xml-declaration conflicts with standalone/doctype
+	ErrSEPM0010 = "SEPM0010" // undeclare-prefixes="yes" requires XML 1.1
+	ErrSEPM0016 = "SEPM0016" // invalid serialization parameter value
+	ErrSERE0006 = "SERE0006" // character invalid for the output XML version
+	ErrSERE0012 = "SERE0012" // invalid character in text
+	ErrSERE0014 = "SERE0014" // invalid character in comment or PI
+	ErrSERE0015 = "SERE0015" // invalid character in namespace
+	ErrSERE0022 = "SERE0022" // duplicate keys in JSON map
+	ErrSESU0007 = "SESU0007" // unsupported output version
+	ErrSESU0011 = "SESU0011" // unsupported normalization form
+	ErrSESU0013 = "SESU0013" // unsupported encoding
+	ErrXPDY0002 = "XPDY0002" // context item is absent
+	ErrXPDY0050 = "XPDY0050"
+	ErrXPST0003 = "XPST0003" // invalid XPath/XSLT type expression
+	ErrXPST0008 = "XPST0008" // undeclared variable / circular static param reference
+	ErrXPST0017 = "XPST0017" // invalid function call in pattern/static context
+	ErrXPST0051 = "XPST0051"
+	ErrXPST0080 = "XPST0080"
+	ErrXPST0081 = "XPST0081"
+	ErrXPTY0004 = "XPTY0004" // type mismatch
+	ErrXPTY0018 = "XPTY0018"
+	ErrXPTY0019 = "XPTY0019"
+)

@@ -111,14 +111,14 @@ func fnData(ctx context.Context, args []Sequence) (Sequence, error) {
 	if len(args) == 0 {
 		fc := getFnContext(ctx)
 		if fc == nil {
-			return nil, &XPathError{Code: errCodeXPDY0002, Message: "data() requires a context item"}
+			return nil, &XPathError{Code: lexicon.ErrXPDY0002, Message: "data() requires a context item"}
 		}
 		if fc.contextItem != nil {
 			args = []Sequence{ItemSlice{fc.contextItem}}
 		} else if fc.node != nil {
 			args = []Sequence{ItemSlice{nodeItemFor(ctx, fc, fc.node)}}
 		} else {
-			return nil, &XPathError{Code: errCodeXPDY0002, Message: "data() requires a context item"}
+			return nil, &XPathError{Code: lexicon.ErrXPDY0002, Message: "data() requires a context item"}
 		}
 	}
 	atoms, err := atomizeTypedValue(ctx, args[0])
@@ -338,7 +338,7 @@ func checkContentKindItem(provider ContentTypeKindProvider, item Item) (skip boo
 	switch kind {
 	case ContentTypeElementOnly:
 		return false, &XPathError{
-			Code:    errCodeFOTY0012,
+			Code:    lexicon.ErrFOTY0012,
 			Message: "element with element-only complex content has no typed value",
 		}
 	case ContentTypeEmpty:
@@ -621,7 +621,7 @@ func fnLang(ctx context.Context, args []Sequence) (Sequence, error) {
 	} else {
 		fc := getFnContext(ctx)
 		if fc == nil || (fc.contextItem == nil && fc.node == nil) {
-			return nil, &XPathError{Code: errCodeXPDY0002, Message: errMsgContextItemAbsent}
+			return nil, &XPathError{Code: lexicon.ErrXPDY0002, Message: errMsgContextItemAbsent}
 		}
 		if fc.node == nil {
 			return nil, &XPathError{Code: lexicon.ErrXPTY0004, Message: "context item is not a node for fn:lang"}
@@ -674,7 +674,7 @@ func fnNumber(ctx context.Context, args []Sequence) (Sequence, error) {
 	if len(args) == 0 {
 		fc := getFnContext(ctx)
 		if fc == nil || (fc.contextItem == nil && fc.node == nil) {
-			return nil, &XPathError{Code: errCodeXPDY0002, Message: errMsgContextItemAbsent}
+			return nil, &XPathError{Code: lexicon.ErrXPDY0002, Message: errMsgContextItemAbsent}
 		}
 		s, ok := fc.contextStringValue()
 		if !ok {
@@ -693,7 +693,7 @@ func fnNumber(ctx context.Context, args []Sequence) (Sequence, error) {
 	if err != nil {
 		// FOTY0013 (atomizing function items) must propagate per XPath 3.1 §2.7.2
 		var xpErr *XPathError
-		if errors.As(err, &xpErr) && xpErr.Code == errCodeFOTY0013 {
+		if errors.As(err, &xpErr) && xpErr.Code == lexicon.ErrFOTY0013 {
 			return nil, err
 		}
 		return SingleDouble(math.NaN()), nil
@@ -733,7 +733,7 @@ func fnParseXML(ctx context.Context, args []Sequence) (Sequence, error) {
 	}
 	doc, err := parser.Parse(ctx, []byte(s))
 	if err != nil {
-		return nil, &XPathError{Code: errCodeFODC0006, Message: fmt.Sprintf("parse-xml: %v", err)}
+		return nil, &XPathError{Code: lexicon.ErrFODC0006, Message: fmt.Sprintf("parse-xml: %v", err)}
 	}
 	doc.SetProperties(doc.Properties() | helium.DocInternal)
 	return ItemSlice{NodeItem{Node: doc}}, nil
@@ -764,7 +764,7 @@ func fnParseXMLFragment(ctx context.Context, args []Sequence) (Sequence, error) 
 
 	first, err := ec.xmlParser().ParseInNodeContext(ctx, doc, []byte(s))
 	if err != nil {
-		return nil, &XPathError{Code: errCodeFODC0006, Message: fmt.Sprintf("parse-xml-fragment: %v", err)}
+		return nil, &XPathError{Code: lexicon.ErrFODC0006, Message: fmt.Sprintf("parse-xml-fragment: %v", err)}
 	}
 
 	for cur := first; cur != nil; {
@@ -774,7 +774,7 @@ func fnParseXMLFragment(ctx context.Context, args []Sequence) (Sequence, error) 
 		// captured, so the walk is unaffected.
 		helium.UnlinkNode(cur.(helium.MutableNode)) //nolint:forcetypeassert
 		if err := doc.AddChild(cur); err != nil {
-			return nil, &XPathError{Code: errCodeFODC0006, Message: fmt.Sprintf("parse-xml-fragment: %v", err)}
+			return nil, &XPathError{Code: lexicon.ErrFODC0006, Message: fmt.Sprintf("parse-xml-fragment: %v", err)}
 		}
 		cur = next
 	}
@@ -789,30 +789,30 @@ func stripXMLTextDeclaration(s string) (string, error) {
 
 	end := strings.Index(s, "?>")
 	if end < 0 {
-		return "", &XPathError{Code: errCodeFODC0006, Message: errMsgParseXMLFragmentMalformedTextDec}
+		return "", &XPathError{Code: lexicon.ErrFODC0006, Message: errMsgParseXMLFragmentMalformedTextDec}
 	}
 
 	decl := s[len("<?xml"):end]
 	names, err := parseXMLPseudoAttributes(decl)
 	if err != nil {
-		return "", &XPathError{Code: errCodeFODC0006, Message: errMsgParseXMLFragmentMalformedTextDec}
+		return "", &XPathError{Code: lexicon.ErrFODC0006, Message: errMsgParseXMLFragmentMalformedTextDec}
 	}
 
 	if len(names) == 0 {
-		return "", &XPathError{Code: errCodeFODC0006, Message: errMsgParseXMLFragmentMalformedTextDec}
+		return "", &XPathError{Code: lexicon.ErrFODC0006, Message: errMsgParseXMLFragmentMalformedTextDec}
 	}
 
 	switch len(names) {
 	case 1:
 		if names[0] != lexicon.DeclEncoding {
-			return "", &XPathError{Code: errCodeFODC0006, Message: errMsgParseXMLFragmentMalformedTextDec}
+			return "", &XPathError{Code: lexicon.ErrFODC0006, Message: errMsgParseXMLFragmentMalformedTextDec}
 		}
 	case 2:
 		if names[0] != lexicon.DeclVersion || names[1] != lexicon.DeclEncoding {
-			return "", &XPathError{Code: errCodeFODC0006, Message: errMsgParseXMLFragmentMalformedTextDec}
+			return "", &XPathError{Code: lexicon.ErrFODC0006, Message: errMsgParseXMLFragmentMalformedTextDec}
 		}
 	default:
-		return "", &XPathError{Code: errCodeFODC0006, Message: errMsgParseXMLFragmentMalformedTextDec}
+		return "", &XPathError{Code: lexicon.ErrFODC0006, Message: errMsgParseXMLFragmentMalformedTextDec}
 	}
 
 	return s[end+2:], nil
@@ -1152,11 +1152,11 @@ func fnCollection(ctx context.Context, args []Sequence) (Sequence, error) {
 
 	ec := getFnContext(ctx)
 	if ec == nil || ec.collectionResolver == nil {
-		return nil, &XPathError{Code: errCodeFODC0002, Message: "fn:collection: no collection resolver configured"}
+		return nil, &XPathError{Code: lexicon.ErrFODC0002, Message: "fn:collection: no collection resolver configured"}
 	}
 	seq, err := ec.collectionResolver.ResolveCollection(uri)
 	if err != nil {
-		return nil, &XPathError{Code: errCodeFODC0002, Message: fmt.Sprintf("fn:collection: cannot resolve collection: %v", err)}
+		return nil, &XPathError{Code: lexicon.ErrFODC0002, Message: fmt.Sprintf("fn:collection: cannot resolve collection: %v", err)}
 	}
 	return seq, nil
 }
@@ -1177,11 +1177,11 @@ func fnURICollection(ctx context.Context, args []Sequence) (Sequence, error) {
 
 	ec := getFnContext(ctx)
 	if ec == nil || ec.collectionResolver == nil {
-		return nil, &XPathError{Code: errCodeFODC0002, Message: "fn:uri-collection: no collection resolver configured"}
+		return nil, &XPathError{Code: lexicon.ErrFODC0002, Message: "fn:uri-collection: no collection resolver configured"}
 	}
 	uris, err := ec.collectionResolver.ResolveURICollection(uri)
 	if err != nil {
-		return nil, &XPathError{Code: errCodeFODC0002, Message: fmt.Sprintf("fn:uri-collection: cannot resolve collection: %v", err)}
+		return nil, &XPathError{Code: lexicon.ErrFODC0002, Message: fmt.Sprintf("fn:uri-collection: cannot resolve collection: %v", err)}
 	}
 
 	result := make(ItemSlice, 0, len(uris))
@@ -1225,7 +1225,7 @@ func fnDocAvailable(ctx context.Context, args []Sequence) (Sequence, error) {
 
 func loadDoc(ctx context.Context, uri string) (helium.Node, error) {
 	if strings.Contains(uri, "#") {
-		return nil, &XPathError{Code: errCodeFODC0005, Message: "fn:doc: URI must not contain a fragment identifier"}
+		return nil, &XPathError{Code: lexicon.ErrFODC0005, Message: "fn:doc: URI must not contain a fragment identifier"}
 	}
 
 	resolved, err := resolveDocURI(ctx, uri)
@@ -1236,7 +1236,7 @@ func loadDoc(ctx context.Context, uri string) (helium.Node, error) {
 	// carry a fragment identifier. Re-check the resolved URI so doc("") with a
 	// fragmented base URI is rejected the same as a fragmented argument.
 	if strings.Contains(resolved, "#") {
-		return nil, &XPathError{Code: errCodeFODC0005, Message: "fn:doc: URI must not contain a fragment identifier"}
+		return nil, &XPathError{Code: lexicon.ErrFODC0005, Message: "fn:doc: URI must not contain a fragment identifier"}
 	}
 	ec := getFnContext(ctx)
 	if ec != nil {
@@ -1247,7 +1247,7 @@ func loadDoc(ctx context.Context, uri string) (helium.Node, error) {
 
 	data, err := unparsedtext.ReadURI(ctx, unparsedTextConfig(ctx), resolved)
 	if err != nil {
-		return nil, &XPathError{Code: errCodeFODC0002, Message: fmt.Sprintf("fn:doc: cannot retrieve resource: %v", err)}
+		return nil, &XPathError{Code: lexicon.ErrFODC0002, Message: fmt.Sprintf("fn:doc: cannot retrieve resource: %v", err)}
 	}
 
 	// The parser governs external entity expansion and network access for the
@@ -1264,7 +1264,7 @@ func loadDoc(ctx context.Context, uri string) (helium.Node, error) {
 	p := ec.xmlParser().MaxNodeContentSize(clampInt64ToInt(ec.maxResourceBytes))
 	doc, err := p.Parse(ctx, data)
 	if err != nil {
-		return nil, &XPathError{Code: errCodeFODC0002, Message: fmt.Sprintf("fn:doc: cannot parse document: %v", err)}
+		return nil, &XPathError{Code: lexicon.ErrFODC0002, Message: fmt.Sprintf("fn:doc: cannot parse document: %v", err)}
 	}
 	doc.SetURL(resolved)
 	if ec != nil {
@@ -1312,7 +1312,7 @@ func resolveCollectionURI(ctx context.Context, uri, fnName string) (string, erro
 
 	ref, err := parseURIReference(uri)
 	if err != nil {
-		return "", &XPathError{Code: errCodeFODC0004, Message: fmt.Sprintf("%s: invalid URI: %v", fnName, err)}
+		return "", &XPathError{Code: lexicon.ErrFODC0004, Message: fmt.Sprintf("%s: invalid URI: %v", fnName, err)}
 	}
 	if ref.IsAbs() {
 		return uri, nil
@@ -1320,11 +1320,11 @@ func resolveCollectionURI(ctx context.Context, uri, fnName string) (string, erro
 
 	if baseURI := baseURIFromContext(ctx); baseURI != "" {
 		if _, err := parseURIReference(baseURI); err != nil {
-			return "", &XPathError{Code: errCodeFODC0004, Message: fmt.Sprintf("%s: invalid base URI: %v", fnName, err)}
+			return "", &XPathError{Code: lexicon.ErrFODC0004, Message: fmt.Sprintf("%s: invalid base URI: %v", fnName, err)}
 		}
 		resolved, err := resolveURIReference(baseURI, uri)
 		if err != nil {
-			return "", &XPathError{Code: errCodeFODC0004, Message: fmt.Sprintf("%s: invalid base URI: %v", fnName, err)}
+			return "", &XPathError{Code: lexicon.ErrFODC0004, Message: fmt.Sprintf("%s: invalid base URI: %v", fnName, err)}
 		}
 		return resolved, nil
 	}
@@ -1338,7 +1338,7 @@ func resolveDocURI(ctx context.Context, uri string) (string, error) {
 		if ec := getFnContext(ctx); ec != nil && ec.baseURI != "" {
 			return ec.baseURI, nil
 		}
-		return "", &XPathError{Code: errCodeFODC0002, Message: "fn:doc: empty URI"}
+		return "", &XPathError{Code: lexicon.ErrFODC0002, Message: "fn:doc: empty URI"}
 	}
 
 	// Absolute file path — use directly
@@ -1348,12 +1348,12 @@ func resolveDocURI(ctx context.Context, uri string) (string, error) {
 
 	parsed, err := parseURIReference(uri)
 	if err != nil {
-		return "", &XPathError{Code: errCodeFODC0002, Message: fmt.Sprintf("fn:doc: invalid URI: %s", uri)}
+		return "", &XPathError{Code: lexicon.ErrFODC0002, Message: fmt.Sprintf("fn:doc: invalid URI: %s", uri)}
 	}
 
 	if parsed.Scheme != "" {
 		if !isSupportedResourceScheme(parsed.Scheme) {
-			return "", &XPathError{Code: errCodeFODC0002, Message: fmt.Sprintf("fn:doc: unsupported URI scheme: %s", parsed.Scheme)}
+			return "", &XPathError{Code: lexicon.ErrFODC0002, Message: fmt.Sprintf("fn:doc: unsupported URI scheme: %s", parsed.Scheme)}
 		}
 		return uri, nil
 	}
@@ -1383,7 +1383,7 @@ func resolveIDLookupDocument(ctx context.Context, args []Sequence) (*helium.Docu
 		fc := getFnContext(ctx)
 		switch {
 		case fc == nil || (fc.node == nil && fc.contextItem == nil):
-			return nil, &XPathError{Code: errCodeXPDY0002, Message: errMsgContextItemAbsent}
+			return nil, &XPathError{Code: lexicon.ErrXPDY0002, Message: errMsgContextItemAbsent}
 		case fc.node != nil:
 			node = fc.node
 		default:
@@ -1394,7 +1394,7 @@ func resolveIDLookupDocument(ctx context.Context, args []Sequence) (*helium.Docu
 	root := ixpath.DocumentRoot(node)
 	doc, ok := root.(*helium.Document)
 	if !ok {
-		return nil, &XPathError{Code: errCodeFODC0001, Message: "fn:id requires a node whose root is a document node"}
+		return nil, &XPathError{Code: lexicon.ErrFODC0001, Message: "fn:id requires a node whose root is a document node"}
 	}
 	return doc, nil
 }
@@ -1450,7 +1450,7 @@ func nodeArgOrCtx(ctx context.Context, args []Sequence) (helium.Node, error) {
 	if len(args) == 0 {
 		fc := getFnContext(ctx)
 		if fc == nil {
-			return nil, &XPathError{Code: errCodeXPDY0002, Message: errMsgContextItemAbsent}
+			return nil, &XPathError{Code: lexicon.ErrXPDY0002, Message: errMsgContextItemAbsent}
 		}
 		if fc.node == nil {
 			return nil, &XPathError{Code: lexicon.ErrXPTY0004, Message: "context item is not a node"}

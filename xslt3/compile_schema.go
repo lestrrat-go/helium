@@ -78,7 +78,7 @@ func (c *compiler) compileSchemaFromURI(ctx context.Context, uri string) (*xsd.S
 	// reports this as ErrCompilationFailed (nil schema); the fatalErrorCounter
 	// carries the diagnostic count for the message.
 	if errors.Is(err, xsd.ErrCompilationFailed) {
-		return nil, staticErrorCause(errCodeXTSE0220, errSchemaContentInvalid,
+		return nil, staticErrorCause(lexicon.ErrXTSE0220, errSchemaContentInvalid,
 			"schema %q has %d schema construction error(s)", uri, errCounter.count.Load())
 	}
 	if err != nil {
@@ -91,7 +91,7 @@ func (c *compiler) compileSchemaFromURI(ctx context.Context, uri string) (*xsd.S
 	// Defensive: a fatal diagnostic without ErrCompilationFailed should not
 	// happen, but keep the XTSE0220 guard so an invalid schema never leaks.
 	if errCounter.count.Load() > 0 {
-		return nil, staticErrorCause(errCodeXTSE0220, errSchemaContentInvalid,
+		return nil, staticErrorCause(lexicon.ErrXTSE0220, errSchemaContentInvalid,
 			"schema %q has %d schema construction error(s)", uri, errCounter.count.Load())
 	}
 	return schema, nil
@@ -105,7 +105,7 @@ func (c *compiler) compileSchemaFromURI(ctx context.Context, uri string) (*xsd.S
 // through the SAME resolver-mediated, bounded channel as the parent module.
 func (c *compiler) loadResourceBytes(_ context.Context, uri string) ([]byte, error) {
 	if c.resolver == nil {
-		return nil, staticError(errCodeXTSE0165,
+		return nil, staticError(lexicon.ErrXTSE0165,
 			"cannot load %q: no URIResolver configured (filesystem access is opt-in; set Compiler.URIResolver)", uri)
 	}
 	rc, err := c.resolver.Resolve(uri)
@@ -121,7 +121,7 @@ func (c *compiler) loadResourceBytes(_ context.Context, uri string) ([]byte, err
 // fallback).
 func (c *compiler) loadSchemaBytes(_ context.Context, uri string) ([]byte, error) {
 	if c.resolver == nil {
-		return nil, staticErrorCause(errCodeXTSE0165, errSchemaResolverDenied,
+		return nil, staticErrorCause(lexicon.ErrXTSE0165, errSchemaResolverDenied,
 			"cannot load schema %q: no URIResolver configured to fetch it; "+
 				"set Compiler.URIResolver to allow or redirect the fetch", uri)
 	}
@@ -190,7 +190,7 @@ func (c *compiler) compileImportSchema(ctx context.Context, elem *helium.Element
 	// XTSE0215: it is a static error if an xsl:import-schema element that
 	// contains an xs:schema element has a schema-location attribute.
 	if schemaLoc != "" && hasInlineSchema {
-		return staticError(errCodeXTSE0215,
+		return staticError(lexicon.ErrXTSE0215,
 			"xsl:import-schema has both schema-location attribute and inline xs:schema child")
 	}
 
@@ -276,14 +276,14 @@ func (c *compiler) compileImportSchema(ctx context.Context, elem *helium.Element
 				c.stylesheet.schemas = append(c.stylesheet.schemas, resolved)
 				return nil
 			}
-			return staticError(errCodeXTSE0220,
+			return staticError(lexicon.ErrXTSE0220,
 				"xsl:import-schema namespace %q does not match schema targetNamespace %q",
 				declaredNS, schema.TargetNamespace())
 		}
 		// XTSE0220: when schema has a non-empty targetNamespace, the namespace
 		// attribute is required (per XSLT spec section 3.13).
 		if declaredNS == "" && schema.TargetNamespace() != "" {
-			return staticError(errCodeXTSE0220,
+			return staticError(lexicon.ErrXTSE0220,
 				"xsl:import-schema: namespace attribute is required when schema has targetNamespace %q",
 				schema.TargetNamespace())
 		}
@@ -337,7 +337,7 @@ func (c *compiler) compileImportSchema(ctx context.Context, elem *helium.Element
 			// constraints (e.g., duplicate global declarations). The xsd
 			// compiler now signals this via ErrCompilationFailed (nil schema).
 			if errors.Is(err, xsd.ErrCompilationFailed) {
-				return staticError(errCodeXTSE0220,
+				return staticError(lexicon.ErrXTSE0220,
 					"xsl:import-schema: inline schema has %d schema construction error(s)", errCounter.count.Load())
 			}
 			if err != nil {
@@ -346,13 +346,13 @@ func (c *compiler) compileImportSchema(ctx context.Context, elem *helium.Element
 			// Defensive guard: a fatal diagnostic without ErrCompilationFailed
 			// should not occur, but never let an invalid schema leak through.
 			if errCounter.count.Load() > 0 {
-				return staticError(errCodeXTSE0220,
+				return staticError(lexicon.ErrXTSE0220,
 					"xsl:import-schema: inline schema has %d schema construction error(s)", errCounter.count.Load())
 			}
 			// XTSE0215: namespace attribute must not conflict with the
 			// targetNamespace of the contained inline schema.
 			if declaredNS != "" && schema.TargetNamespace() != declaredNS {
-				return staticError(errCodeXTSE0215,
+				return staticError(lexicon.ErrXTSE0215,
 					"xsl:import-schema namespace %q conflicts with inline schema targetNamespace %q",
 					declaredNS, schema.TargetNamespace())
 			}
@@ -529,7 +529,7 @@ func checkStepAgainstSchema(step xpath3.Step, reg *schemaRegistry, xpathDefaultN
 	}
 	// Check if element is declared in imported schemas
 	if _, found := reg.LookupElement(nt.Local, ns); !found {
-		return staticError(errCodeXTSE3105,
+		return staticError(lexicon.ErrXTSE3105,
 			"match pattern uses element name %q which is not declared in any imported schema (mode has typed=\"strict\")",
 			nt.Local)
 	}
@@ -644,7 +644,7 @@ func (c *compiler) validateAsSequenceTypeWithNS(_ context.Context, as string, co
 		if errors.As(err, &xpErr) {
 			return staticError(xpErr.Code, "%s: invalid 'as' type: %s", context, err)
 		}
-		return staticError(errCodeXPST0003, "%s: invalid 'as' type: %s", context, err)
+		return staticError(lexicon.ErrXPST0003, "%s: invalid 'as' type: %s", context, err)
 	}
 	if !c.stylesheet.schemaAware || len(c.stylesheet.schemas) == 0 {
 		return nil
@@ -694,7 +694,7 @@ func (c *compiler) validateAsSequenceTypeWithNS(_ context.Context, as string, co
 				_, found = reg.LookupAttribute(local, ns)
 			}
 			if !found {
-				return staticError(errCodeXTSE0590,
+				return staticError(lexicon.ErrXTSE0590,
 					"%s: as=\"%s\" references undeclared %s({%s}%s)",
 					context, as, kind, ns, local)
 			}

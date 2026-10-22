@@ -7,6 +7,7 @@ import (
 	"strings"
 
 	"github.com/lestrrat-go/helium"
+	"github.com/lestrrat-go/helium/internal/lexicon"
 	"github.com/lestrrat-go/helium/internal/sequence"
 	"github.com/lestrrat-go/helium/xpath3"
 )
@@ -564,12 +565,12 @@ func (ec *execContext) groupAdjacent(ctx context.Context, seq xpath3.Sequence, a
 			resultSeq := result.Sequence()
 			if resultSeq == nil || sequence.Len(resultSeq) == 0 {
 				// XTTE1100: group-adjacent key must not be an empty sequence
-				return nil, dynamicError(errCodeXTTE1100,
+				return nil, dynamicError(lexicon.ErrXTTE1100,
 					"group-adjacent key is an empty sequence")
 			}
 			if sequence.Len(resultSeq) > 1 {
 				// XTTE1100: group-adjacent key must be a single atomic value
-				return nil, dynamicError(errCodeXTTE1100,
+				return nil, dynamicError(lexicon.ErrXTTE1100,
 					"group-adjacent key has %d items (expected 1)", sequence.Len(resultSeq))
 			}
 			keyVal, keySeq = groupLookupKey(resultSeq.Get(0), nil)
@@ -756,7 +757,7 @@ func (ec *execContext) execVariable(ctx context.Context, inst *variableInst) err
 	// Type check against the declared as type
 	if inst.As != "" {
 		st := parseSequenceType(inst.As)
-		checked, err := checkSequenceType(ctx, val, st, errCodeXTTE0570, "variable $"+inst.Name, ec)
+		checked, err := checkSequenceType(ctx, val, st, lexicon.ErrXTTE0570, "variable $"+inst.Name, ec)
 		if err != nil {
 			return err
 		}

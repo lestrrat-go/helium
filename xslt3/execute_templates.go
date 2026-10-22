@@ -23,7 +23,7 @@ func (ec *execContext) applyTemplates(ctx context.Context, node helium.Node, mod
 	ec.depth++
 	if ec.depth > maxRecursionDepth {
 		ec.depth--
-		return dynamicError(errCodeXTDE0820, "recursion depth exceeded")
+		return dynamicError(lexicon.ErrXTDE0820, "recursion depth exceeded")
 	}
 	defer func() { ec.depth-- }()
 
@@ -52,12 +52,12 @@ func (ec *execContext) applyTemplates(ctx context.Context, node helium.Node, mod
 		switch md.Typed {
 		case lexicon.ValueYes, lexicon.ValueTrue, "1", validationStrict, validationLax:
 			if !ec.nodeIsTyped(node) {
-				return dynamicError(errCodeXTTE3100,
+				return dynamicError(lexicon.ErrXTTE3100,
 					"mode %q has typed=%q but node is untyped", mode, md.Typed)
 			}
 		case lexicon.ValueNo, lexicon.ValueFalse, "0":
 			if ec.nodeIsTyped(node) {
-				return dynamicError(errCodeXTTE3110,
+				return dynamicError(lexicon.ErrXTTE3110,
 					"mode %q has typed=%q but node is typed", mode, md.Typed)
 			}
 		}
@@ -140,7 +140,7 @@ func (ec *execContext) findBestTemplate(ctx context.Context, node helium.Node, m
 	// with the same priority and import precedence.
 	if ec.onMultipleMatchFail(mode) {
 		if ec.hasConflictingMatch(ctx, node, mode, best) {
-			return nil, dynamicError(errCodeXTDE0540,
+			return nil, dynamicError(lexicon.ErrXTDE0540,
 				"ambiguous rule match for node %v in mode %q (on-multiple-match=fail)",
 				node, mode)
 		}
@@ -361,7 +361,7 @@ func (ec *execContext) findAtomicTemplate(ctx context.Context, item xpath3.Item,
 	// Check on-multiple-match="fail": look for conflicting atomic template match.
 	if ec.onMultipleMatchFail(mode) {
 		if ec.hasConflictingAtomicMatch(ctx, item, mode, best) {
-			return nil, dynamicError(errCodeXTDE0540,
+			return nil, dynamicError(lexicon.ErrXTDE0540,
 				"ambiguous rule match for atomic item in mode %q (on-multiple-match=fail)", mode)
 		}
 	}
@@ -489,7 +489,7 @@ func (ec *execContext) executeAtomicTemplate(ctx context.Context, tmpl *template
 		if !fromCaller {
 			// XTDE0700: required parameter not supplied
 			if p.Required {
-				return dynamicError(errCodeXTDE0700, "required parameter $%s was not supplied", p.Name)
+				return dynamicError(lexicon.ErrXTDE0700, "required parameter $%s was not supplied", p.Name)
 			}
 
 			if p.Select != nil {
@@ -521,9 +521,9 @@ func (ec *execContext) executeAtomicTemplate(ctx context.Context, tmpl *template
 		// default-handling logic above.
 		if p.As != "" && (val != nil || fromCaller) {
 			st := parseSequenceType(p.As)
-			errCode := errCodeXTTE0570
+			errCode := lexicon.ErrXTTE0570
 			if fromCaller {
-				errCode = errCodeXTTE0590
+				errCode = lexicon.ErrXTTE0590
 			}
 			checked, err := checkSequenceType(ctx, val, st, errCode, "param $"+p.Name, ec)
 			if err != nil {
@@ -667,13 +667,13 @@ func (ec *execContext) executeTemplate(ctx context.Context, tmpl *template, node
 				if p.Tunnel {
 					kind = "tunnel "
 				}
-				return dynamicError(errCodeXTDE0700, "required %sparameter $%s was not supplied", kind, p.Name)
+				return dynamicError(lexicon.ErrXTDE0700, "required %sparameter $%s was not supplied", kind, p.Name)
 			}
 			// XTDE0700: optional parameter with as type that doesn't allow
 			// empty sequence and no default value is effectively required.
 			if p.Select == nil && len(p.Body) == 0 && p.As != "" {
 				if !allowsEmptySequence(p.As) {
-					return dynamicError(errCodeXTDE0700,
+					return dynamicError(lexicon.ErrXTDE0700,
 						"required parameter $%s (type %s does not allow empty sequence) was not supplied",
 						p.Name, p.As)
 				}
@@ -708,9 +708,9 @@ func (ec *execContext) executeTemplate(ctx context.Context, tmpl *template, node
 		// default-handling logic above.
 		if p.As != "" && (val != nil || fromCaller) {
 			st := parseSequenceType(p.As)
-			errCode := errCodeXTTE0570
+			errCode := lexicon.ErrXTTE0570
 			if fromCaller {
-				errCode = errCodeXTTE0590
+				errCode = lexicon.ErrXTTE0590
 			}
 			checked, err := checkSequenceType(ctx, val, st, errCode, "param $"+p.Name, ec)
 			if err != nil {
@@ -747,7 +747,7 @@ func (ec *execContext) executeTemplateBodyWithAs(ctx context.Context, tmpl *temp
 	stripped, doeTextIndices := stripDOEMarkers(seq)
 
 	st := parseSequenceType(tmpl.As)
-	checked, err := checkSequenceType(ctx, stripped, st, errCodeXTTE0505, "template", ec)
+	checked, err := checkSequenceType(ctx, stripped, st, lexicon.ErrXTTE0505, "template", ec)
 	if err != nil {
 		return err
 	}
@@ -810,7 +810,7 @@ func (ec *execContext) executeTemplateBodyWithAs(ctx context.Context, tmpl *temp
 					if elem, ok := out.current.(*helium.Element); ok {
 						// XTDE0410: cannot add attribute after child content
 						if elem.FirstChild() != nil {
-							return dynamicError(errCodeXTDE0410,
+							return dynamicError(lexicon.ErrXTDE0410,
 								"cannot add attribute to element after children have been added")
 						}
 						if attr.URI() != "" {
@@ -885,7 +885,7 @@ func (ec *execContext) executeTemplateBodyWithAs(ctx context.Context, tmpl *temp
 				out.pendingItems = append(out.pendingItems, item)
 				out.noteOutput()
 			} else {
-				return dynamicError(errCodeXTDE0450,
+				return dynamicError(lexicon.ErrXTDE0450,
 					"cannot add a %T to the result tree", item)
 			}
 		}

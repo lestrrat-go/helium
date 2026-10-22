@@ -24,7 +24,7 @@ func TestXPathErrorIs(t *testing.T) {
 
 	t.Run("different code does not match", func(t *testing.T) {
 		err := &xpath3.XPathError{Code: lexicon.ErrXPTY0004, Message: "type mismatch"}
-		assert.False(t, errors.Is(err, &xpath3.XPathError{Code: "FOAR0002"}))
+		assert.False(t, errors.Is(err, &xpath3.XPathError{Code: lexicon.ErrFOAR0002}))
 	})
 
 	t.Run("empty code target does not match", func(t *testing.T) {
@@ -38,17 +38,17 @@ func TestXPathErrorIs(t *testing.T) {
 	})
 
 	t.Run("wrapped XPathError matches via errors.Is", func(t *testing.T) {
-		inner := &xpath3.XPathError{Code: "FOAR0001", Message: "division by zero"}
+		inner := &xpath3.XPathError{Code: lexicon.ErrFOAR0001, Message: "division by zero"}
 		wrapped := fmt.Errorf("eval failed: %w", inner)
-		assert.True(t, errors.Is(wrapped, &xpath3.XPathError{Code: "FOAR0001"}))
+		assert.True(t, errors.Is(wrapped, &xpath3.XPathError{Code: lexicon.ErrFOAR0001}))
 	})
 
 	t.Run("errors.As extracts XPathError", func(t *testing.T) {
-		inner := &xpath3.XPathError{Code: "FORG0001", Message: "invalid value"}
+		inner := &xpath3.XPathError{Code: lexicon.ErrFORG0001, Message: "invalid value"}
 		wrapped := fmt.Errorf("eval failed: %w", inner)
 		xpErr, ok := errors.AsType[*xpath3.XPathError](wrapped)
 		require.True(t, ok)
-		assert.Equal(t, "FORG0001", xpErr.Code)
+		assert.Equal(t, lexicon.ErrFORG0001, xpErr.Code)
 	})
 }
 

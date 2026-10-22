@@ -4,6 +4,7 @@ import (
 	"context"
 	"testing"
 
+	"github.com/lestrrat-go/helium/internal/lexicon"
 	"github.com/lestrrat-go/helium/internal/sequence"
 	"github.com/lestrrat-go/helium/xpath3"
 	"github.com/stretchr/testify/require"
@@ -35,7 +36,7 @@ func TestValueComparison_CardinalityEarlyStop(t *testing.T) {
 		Evaluate(t.Context(), compiled, doc)
 
 	require.Error(t, err)
-	require.Contains(t, err.Error(), "XPTY0004")
+	require.Contains(t, err.Error(), lexicon.ErrXPTY0004)
 	// Distinguishing empty / one / more-than-one needs at most two atoms; the
 	// fix must early-stop, draining no more than that.
 	require.LessOrEqual(t, produced, 2,

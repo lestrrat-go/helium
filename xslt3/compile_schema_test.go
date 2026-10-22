@@ -11,6 +11,7 @@ import (
 	"testing"
 
 	"github.com/lestrrat-go/helium"
+	"github.com/lestrrat-go/helium/internal/lexicon"
 	"github.com/lestrrat-go/helium/xsd"
 	"github.com/lestrrat-go/helium/xslt3"
 	"github.com/stretchr/testify/require"
@@ -538,7 +539,7 @@ func TestImportSchema(t *testing.T) {
 		require.NoError(t, err)
 		_, err = xslt3.NewCompiler().BaseURI(baseURI).URIResolver(resolver).Compile(ctx, doc)
 		require.Error(t, err, "file-backed import-schema with an unresolved referenced type must fail compilation")
-		require.Contains(t, err.Error(), "XTSE0220",
+		require.Contains(t, err.Error(), lexicon.ErrXTSE0220,
 			"fatal schema-construction error must surface as XTSE0220; got %v", err)
 	})
 

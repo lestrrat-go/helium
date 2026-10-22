@@ -801,7 +801,7 @@ func validateDocIDConstraints(doc *helium.Document, ann xsd.TypeAnnotations) err
 		switch typeName {
 		case "xs:ID":
 			if _, dup := ids[val]; dup {
-				return dynamicError(errCodeXTTE1555,
+				return dynamicError(lexicon.ErrXTTE1555,
 					"duplicate xs:ID value %q in validated document", val)
 			}
 			ids[val] = struct{}{}
@@ -826,7 +826,7 @@ func validateDocIDConstraints(doc *helium.Document, ann xsd.TypeAnnotations) err
 	// Check that all IDREFs resolve to an ID.
 	for _, ref := range idrefs {
 		if _, ok := ids[ref]; !ok {
-			return dynamicError(errCodeXTTE1555,
+			return dynamicError(lexicon.ErrXTTE1555,
 				"xs:IDREF value %q does not resolve to any xs:ID in the validated document", ref)
 		}
 	}
@@ -852,7 +852,7 @@ func walkElementsForID(node helium.Node, ids map[string]struct{}) error {
 			if attr.URI() == lexicon.NamespaceXML && attr.LocalName() == "id" {
 				val := attr.Value()
 				if _, dup := ids[val]; dup {
-					return dynamicError(errCodeXTTE1555,
+					return dynamicError(lexicon.ErrXTTE1555,
 						"duplicate xml:id value %q in validated document", val)
 				}
 				ids[val] = struct{}{}

@@ -28,7 +28,7 @@ func (c *compiler) compileCharacterMap(ctx context.Context, elem *helium.Element
 
 	name := getAttr(elem, xslAttrName)
 	if name == "" {
-		return staticError(errCodeXTSE0110, "xsl:character-map requires name attribute")
+		return staticError(lexicon.ErrXTSE0110, "xsl:character-map requires name attribute")
 	}
 	name = resolveQName(name, c.nsBindings)
 
@@ -53,7 +53,7 @@ func (c *compiler) compileCharacterMap(ctx context.Context, elem *helium.Element
 		}
 		charAttr := getAttr(childElem, "character")
 		if charAttr == "" {
-			return staticError(errCodeXTSE0010,
+			return staticError(lexicon.ErrXTSE0010,
 				"xsl:output-character requires 'character' attribute")
 		}
 		r := firstRune(charAttr)
@@ -71,7 +71,7 @@ func (c *compiler) compileCharacterMap(ctx context.Context, elem *helium.Element
 	// same stylesheet module. Different modules may define the same name;
 	// higher import precedence overrides, same precedence merges.
 	if prevModule, exists := c.charMapModuleKeys[name]; exists && prevModule == c.moduleKey {
-		return staticError(errCodeXTSE1580,
+		return staticError(lexicon.ErrXTSE1580,
 			"duplicate character-map declaration %q", name)
 	}
 	c.charMapModuleKeys[name] = c.moduleKey
@@ -110,15 +110,15 @@ func (c *compiler) compileKey(ctx context.Context, elem *helium.Element) error {
 
 	name := getAttr(elem, "name")
 	if name == "" {
-		return staticError(errCodeXTSE0110, "xsl:key requires name attribute")
+		return staticError(lexicon.ErrXTSE0110, "xsl:key requires name attribute")
 	}
 	if !xmlchar.IsValidQName(name) && !isValidEQName(name) {
-		return staticError(errCodeXTSE0020, "invalid name %q on xsl:key", name)
+		return staticError(lexicon.ErrXTSE0020, "invalid name %q on xsl:key", name)
 	}
 
 	matchAttr := getAttr(elem, "match")
 	if matchAttr == "" {
-		return staticError(errCodeXTSE0110, "xsl:key requires match attribute")
+		return staticError(lexicon.ErrXTSE0110, "xsl:key requires match attribute")
 	}
 
 	// Apply a local xpath-default-namespace on the xsl:key element (presence,
@@ -143,7 +143,7 @@ func (c *compiler) compileKey(ctx context.Context, elem *helium.Element) error {
 	// attribute must agree
 	if existingDefs, ok := c.stylesheet.keys[expandedName]; ok && len(existingDefs) > 0 {
 		if existingDefs[0].Composite != composite {
-			return staticError(errCodeXTSE1222,
+			return staticError(lexicon.ErrXTSE1222,
 				"xsl:key declarations with name %q have conflicting composite attributes", expandedName)
 		}
 	}
@@ -153,7 +153,7 @@ func (c *compiler) compileKey(ctx context.Context, elem *helium.Element) error {
 	if collAttr := getAttr(elem, "collation"); collAttr != "" {
 		// XTSE1210: collation must be a recognized URI
 		if !xpath3.IsCollationSupported(collAttr) {
-			return staticError(errCodeXTSE1210, "unrecognized collation URI %q on xsl:key", collAttr)
+			return staticError(lexicon.ErrXTSE1210, "unrecognized collation URI %q on xsl:key", collAttr)
 		}
 		collationURI = collAttr
 	} else if c.defaultCollation != "" {
@@ -164,7 +164,7 @@ func (c *compiler) compileKey(ctx context.Context, elem *helium.Element) error {
 	// must agree across all declarations
 	if existingDefs, ok := c.stylesheet.keys[expandedName]; ok && len(existingDefs) > 0 {
 		if existingDefs[0].Collation != collationURI {
-			return staticError(errCodeXTSE1220,
+			return staticError(lexicon.ErrXTSE1220,
 				"xsl:key declarations with name %q have conflicting collation attributes", expandedName)
 		}
 	}
@@ -181,10 +181,10 @@ func (c *compiler) compileKey(ctx context.Context, elem *helium.Element) error {
 	hasContent := c.hasEffectiveContent(ctx, elem)
 	// XTSE1205: must have either use attr or content, not both, and not neither
 	if useAttr != "" && hasContent {
-		return staticError(errCodeXTSE1205, "xsl:key must not have both a use attribute and content")
+		return staticError(lexicon.ErrXTSE1205, "xsl:key must not have both a use attribute and content")
 	}
 	if useAttr == "" && !hasContent {
-		return staticError(errCodeXTSE1205, "xsl:key must have either a use attribute or content")
+		return staticError(lexicon.ErrXTSE1205, "xsl:key must have either a use attribute or content")
 	}
 	if useAttr != "" {
 		useExpr, err := c.compileXPath(useAttr, c.nsBindings)
@@ -227,12 +227,12 @@ func outputBoolAttr(elem *helium.Element, attr string, yesNoOnly bool) (bool, bo
 		case lexicon.ValueNo:
 			return false, true, nil
 		default:
-			return false, false, staticError(errCodeSEPM0016, "%q is not a valid value for xsl:output/@"+attr, v)
+			return false, false, staticError(lexicon.ErrSEPM0016, "%q is not a valid value for xsl:output/@"+attr, v)
 		}
 	}
 	b, ok := parseXSDBool(v)
 	if !ok {
-		return false, false, staticError(errCodeSEPM0016, "%q is not a valid value for xsl:output/@"+attr, v)
+		return false, false, staticError(lexicon.ErrSEPM0016, "%q is not a valid value for xsl:output/@"+attr, v)
 	}
 	return b, true, nil
 }
@@ -287,10 +287,10 @@ func (c *compiler) compileOutput(ctx context.Context, elem *helium.Element) erro
 			case methodXML, methodHTML, methodXHTML, methodText, methodJSON, methodAdaptive:
 				// valid
 			default:
-				return staticError(errCodeXTSE1570, "invalid output method %q", methodStr)
+				return staticError(lexicon.ErrXTSE1570, "invalid output method %q", methodStr)
 			}
 		} else if !xmlchar.IsValidQName(methodStr) && !isValidEQName(methodStr) {
-			return staticError(errCodeXTSE1570, "invalid output method %q", methodStr)
+			return staticError(lexicon.ErrXTSE1570, "invalid output method %q", methodStr)
 		}
 	}
 	outDef := &OutputDef{
@@ -364,16 +364,16 @@ func (c *compiler) compileOutput(ctx context.Context, elem *helium.Element) erro
 			// valid as-is
 		case lexicon.ValueTrue, "1":
 			if yesNoOnly {
-				return staticError(errCodeSEPM0016, "%q is not a valid value for xsl:output/@standalone", v)
+				return staticError(lexicon.ErrSEPM0016, "%q is not a valid value for xsl:output/@standalone", v)
 			}
 			v = lexicon.ValueYes
 		case lexicon.ValueFalse, "0":
 			if yesNoOnly {
-				return staticError(errCodeSEPM0016, "%q is not a valid value for xsl:output/@standalone", v)
+				return staticError(lexicon.ErrSEPM0016, "%q is not a valid value for xsl:output/@standalone", v)
 			}
 			v = lexicon.ValueNo
 		default:
-			return staticError(errCodeSEPM0016, "%q is not a valid value for xsl:output/@standalone", v)
+			return staticError(lexicon.ErrSEPM0016, "%q is not a valid value for xsl:output/@standalone", v)
 		}
 		outDef.Standalone = v
 		outDef.StandaloneRaw = getAttr(elem, paramStandalone)
@@ -386,7 +386,7 @@ func (c *compiler) compileOutput(ctx context.Context, elem *helium.Element) erro
 	if hv := getAttr(elem, paramHTMLVersion); hv != "" {
 		hv = strings.TrimSpace(hv)
 		if _, err := strconv.ParseFloat(hv, 64); err != nil {
-			return staticError(errCodeXTSE0020, "%q is not a valid value for xsl:output/@html-version", hv)
+			return staticError(lexicon.ErrXTSE0020, "%q is not a valid value for xsl:output/@html-version", hv)
 		}
 		outDef.HTMLVersion = hv
 	}
@@ -478,7 +478,7 @@ func (c *compiler) compileOutput(ctx context.Context, elem *helium.Element) erro
 		}
 		for _, chk := range checks {
 			if chk.newIsSet && chk.oldIsSet && chk.oldVal != chk.newVal {
-				return staticError(errCodeXTSE1560,
+				return staticError(lexicon.ErrXTSE1560,
 					"conflicting values for xsl:output/@%s: %q vs %q", chk.attrName, chk.oldVal, chk.newVal)
 			}
 		}
@@ -572,11 +572,11 @@ func (c *compiler) loadParameterDocument(ctx context.Context, outDef *OutputDef,
 	// Compiler.URIResolver. There is no implicit filesystem access.
 	loadBytes := func(_ context.Context, uri string) ([]byte, error) {
 		if c.resolver == nil {
-			return nil, staticError(errCodeXTSE0090, "cannot read parameter-document %q: no URIResolver configured (filesystem access is opt-in; set Compiler.URIResolver)", href)
+			return nil, staticError(lexicon.ErrXTSE0090, "cannot read parameter-document %q: no URIResolver configured (filesystem access is opt-in; set Compiler.URIResolver)", href)
 		}
 		rc, resolveErr := c.resolver.Resolve(uri)
 		if resolveErr != nil {
-			return nil, staticError(errCodeXTSE0090, "cannot read parameter-document %q: %v", href, resolveErr)
+			return nil, staticError(lexicon.ErrXTSE0090, "cannot read parameter-document %q: %v", href, resolveErr)
 		}
 		defer func() { _ = rc.Close() }()
 		return readResourceBounded(rc, c.maxResourceBytes)
@@ -641,7 +641,7 @@ func loadParameterDocumentFromFile(ctx context.Context, injected *helium.Parser,
 		// than returning the static wrapper. The cause (e.g. ErrResourceTooLarge)
 		// survives the join either way.
 		if runtime {
-			return adnExplicit, presence, dynamicErrorCause(errCodeFODC0002, err, "cannot read parameter-document %q: %v", href, err)
+			return adnExplicit, presence, dynamicErrorCause(lexicon.ErrFODC0002, err, "cannot read parameter-document %q: %v", href, err)
 		}
 		// The compile-time loader already returns an *XSLTError (XTSE0090);
 		// return it as-is, wrapping it in no second XTSE0090.
@@ -649,7 +649,7 @@ func loadParameterDocumentFromFile(ctx context.Context, injected *helium.Parser,
 		if errors.As(err, &xe) {
 			return adnExplicit, presence, err
 		}
-		return adnExplicit, presence, staticErrorCause(errCodeXTSE0090, err, "cannot read parameter-document %q: %v", href, err)
+		return adnExplicit, presence, staticErrorCause(lexicon.ErrXTSE0090, err, "cannot read parameter-document %q: %v", href, err)
 	}
 	// Serialization parameter documents have a fixed W3C schema and never use
 	// external entities; parse with the injected base parser (or XXE blocked by
@@ -657,16 +657,16 @@ func loadParameterDocumentFromFile(ctx context.Context, injected *helium.Parser,
 	doc, err := secureXMLParser(injected, "", resourceLimit).Parse(ctx, data)
 	if err != nil {
 		if runtime {
-			return adnExplicit, presence, dynamicError(errCodeFODC0002, "cannot parse parameter-document %q: %v", href, err)
+			return adnExplicit, presence, dynamicError(lexicon.ErrFODC0002, "cannot parse parameter-document %q: %v", href, err)
 		}
-		return adnExplicit, presence, staticError(errCodeXTSE0090, "cannot parse parameter-document %q: %v", href, err)
+		return adnExplicit, presence, staticError(lexicon.ErrXTSE0090, "cannot parse parameter-document %q: %v", href, err)
 	}
 	root := doc.DocumentElement()
 	if root == nil || root.LocalName() != "serialization-parameters" || root.URI() != lexicon.NamespaceSerialization {
 		if runtime {
-			return adnExplicit, presence, dynamicError(errCodeFODC0002, "parameter-document %q: root element must be {%s}serialization-parameters", href, lexicon.NamespaceSerialization)
+			return adnExplicit, presence, dynamicError(lexicon.ErrFODC0002, "parameter-document %q: root element must be {%s}serialization-parameters", href, lexicon.NamespaceSerialization)
 		}
-		return adnExplicit, presence, staticError(errCodeXTSE0090, "parameter-document %q: root element must be {%s}serialization-parameters", href, lexicon.NamespaceSerialization)
+		return adnExplicit, presence, staticError(lexicon.ErrXTSE0090, "parameter-document %q: root element must be {%s}serialization-parameters", href, lexicon.NamespaceSerialization)
 	}
 
 	for child := range helium.Children(root) {
@@ -828,10 +828,10 @@ func (c *compiler) compileAttributeSet(ctx context.Context, elem *helium.Element
 	}
 	name := getAttr(elem, xslAttrName)
 	if name == "" {
-		return staticError(errCodeXTSE0110, "xsl:attribute-set requires name attribute")
+		return staticError(lexicon.ErrXTSE0110, "xsl:attribute-set requires name attribute")
 	}
 	if !xmlchar.IsValidQName(name) && !isValidEQName(name) {
-		return staticError(errCodeXTSE0020, "invalid name %q on xsl:attribute-set", name)
+		return staticError(lexicon.ErrXTSE0020, "invalid name %q on xsl:attribute-set", name)
 	}
 	if err := c.checkQNamePrefix(ctx, name, "xsl:attribute-set"); err != nil {
 		return err
@@ -842,7 +842,7 @@ func (c *compiler) compileAttributeSet(ctx context.Context, elem *helium.Element
 	if s := getAttr(elem, "streamable"); s != "" {
 		v, ok := parseXSDBool(s)
 		if !ok {
-			return staticError(errCodeXTSE0020, "invalid value %q for streamable attribute on xsl:attribute-set", s)
+			return staticError(lexicon.ErrXTSE0020, "invalid value %q for streamable attribute on xsl:attribute-set", s)
 		}
 		streamable = v
 	}
@@ -864,12 +864,12 @@ func (c *compiler) compileAttributeSet(ctx context.Context, elem *helium.Element
 		if !ok {
 			// XTSE0010: text content not allowed in xsl:attribute-set
 			if isNonWhitespaceTextNode(child) {
-				return staticError(errCodeXTSE0010, "text is not allowed as a child of xsl:attribute-set")
+				return staticError(lexicon.ErrXTSE0010, "text is not allowed as a child of xsl:attribute-set")
 			}
 			continue
 		}
 		if childElem.URI() != lexicon.NamespaceXSLT || childElem.LocalName() != lexicon.XSLTElementAttribute {
-			return staticError(errCodeXTSE0010, "only xsl:attribute is allowed as a child of xsl:attribute-set")
+			return staticError(lexicon.ErrXTSE0010, "only xsl:attribute is allowed as a child of xsl:attribute-set")
 		}
 		inst, err := c.compileAttribute(ctx, childElem)
 		if err != nil {
@@ -925,7 +925,7 @@ func checkAttributeSetCycles(ss *Stylesheet) error {
 		case done:
 			return nil
 		case visiting:
-			return staticError(errCodeXTSE0720,
+			return staticError(lexicon.ErrXTSE0720,
 				"attribute-set %q has a circular use-attribute-sets reference", name)
 		}
 		state[name] = visiting
@@ -938,7 +938,7 @@ func checkAttributeSetCycles(ss *Stylesheet) error {
 					continue
 				}
 				if _, ok := ss.attributeSets[ref]; !ok {
-					return staticError(errCodeXTSE0710,
+					return staticError(lexicon.ErrXTSE0710,
 						"attribute-set %q references undeclared attribute-set %q", name, ref)
 				}
 				if err := visit(ref); err != nil {
@@ -972,7 +972,7 @@ func checkAttributeSetStreamable(ss *Stylesheet) error {
 				continue
 			}
 			if !used.Streamable {
-				return staticError(errCodeXTSE0730,
+				return staticError(lexicon.ErrXTSE0730,
 					"streamable attribute-set %q references non-streamable attribute-set %q",
 					asd.Name, ref)
 			}
@@ -999,7 +999,7 @@ func (c *compiler) compileDecimalFormat(ctx context.Context, elem *helium.Elemen
 	qn := xpath3.QualifiedName{}
 	if name != "" {
 		if !xmlchar.IsValidQName(name) && !isValidEQName(name) {
-			return staticError(errCodeXTSE0020, "invalid name %q on xsl:decimal-format", name)
+			return staticError(lexicon.ErrXTSE0020, "invalid name %q on xsl:decimal-format", name)
 		}
 		qn = xpath3.QualifiedName{Name: name}
 		if prefix, local, ok := strings.Cut(name, ":"); ok {
@@ -1021,7 +1021,7 @@ func (c *compiler) compileDecimalFormat(ctx context.Context, elem *helium.Elemen
 	if v := getAttr(elem, "zero-digit"); v != "" {
 		zd := firstRune(v)
 		if !unicode.IsDigit(zd) || !isDigitZero(zd) {
-			return staticError(errCodeXTSE1295,
+			return staticError(lexicon.ErrXTSE1295,
 				"zero-digit %q is not a Unicode digit-zero character", string(zd))
 		}
 	}
@@ -1136,7 +1136,7 @@ func checkDecimalFormatCharConflicts(df xpath3.DecimalFormat) error {
 	for i := range roles {
 		for j := i + 1; j < len(roles); j++ {
 			if roles[i].char == roles[j].char {
-				return staticError(errCodeXTSE1300,
+				return staticError(lexicon.ErrXTSE1300,
 					"%s and %s use the same character %q",
 					roles[i].role, roles[j].role, string(roles[i].char))
 			}
@@ -1175,7 +1175,7 @@ func checkDecimalFormatConflictExplicit(existing xpath3.DecimalFormat, elem *hel
 		}
 		newVal := firstRune(v)
 		if newVal != rc.cur {
-			return staticError(errCodeXTSE1290,
+			return staticError(lexicon.ErrXTSE1290,
 				"conflicting xsl:decimal-format declarations: %s was %q, now %q",
 				rc.attr, string(rc.cur), string(newVal))
 		}
@@ -1183,14 +1183,14 @@ func checkDecimalFormatConflictExplicit(existing xpath3.DecimalFormat, elem *hel
 	// String properties
 	if v := getAttr(elem, "infinity"); v != "" {
 		if _, wasSet := prevSet["infinity"]; wasSet && v != existing.Infinity {
-			return staticError(errCodeXTSE1290,
+			return staticError(lexicon.ErrXTSE1290,
 				"conflicting xsl:decimal-format declarations: infinity was %q, now %q",
 				existing.Infinity, v)
 		}
 	}
 	if v := getAttr(elem, "NaN"); v != "" {
 		if _, wasSet := prevSet["NaN"]; wasSet && v != existing.NaN {
-			return staticError(errCodeXTSE1290,
+			return staticError(lexicon.ErrXTSE1290,
 				"conflicting xsl:decimal-format declarations: NaN was %q, now %q",
 				existing.NaN, v)
 		}
@@ -1221,7 +1221,7 @@ func (c *compiler) compileSpaceHandling(ctx context.Context, elem *helium.Elemen
 	}
 	elements := getAttr(elem, "elements")
 	if !elem.HasAttribute("elements") {
-		return staticError(errCodeXTSE0010, "xsl:%s requires the elements attribute", kind)
+		return staticError(lexicon.ErrXTSE0010, "xsl:%s requires the elements attribute", kind)
 	}
 
 	// Apply per-element xpath-default-namespace
@@ -1256,7 +1256,7 @@ func (c *compiler) compileSpaceHandling(ctx context.Context, elem *helium.Elemen
 				// XTSE0280: the prefix must be declared in scope here.
 				uri, ok := declNS[prefix]
 				if !ok {
-					return staticError(errCodeXTSE0280, "undeclared namespace prefix %q in xsl:%s elements attribute", prefix, kind)
+					return staticError(lexicon.ErrXTSE0280, "undeclared namespace prefix %q in xsl:%s elements attribute", prefix, kind)
 				}
 				nt.URI = uri
 				nt.HasURI = true
@@ -1465,7 +1465,7 @@ func (c *compiler) checkSpaceConflicts(_ context.Context) error {
 			if c.spaceRegionCovered(region, sNT.ImportPrec) {
 				continue
 			}
-			return staticError(errCodeXTSE0270,
+			return staticError(lexicon.ErrXTSE0270,
 				"conflicting xsl:strip-space and xsl:preserve-space for %q at the same import precedence",
 				nameTestKey(region))
 		}

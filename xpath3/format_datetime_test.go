@@ -6,6 +6,8 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/require"
+
+	"github.com/lestrrat-go/helium/internal/lexicon"
 )
 
 // formatDateTimeWidthValue is the dateTime every width test formats:
@@ -83,9 +85,9 @@ func TestFormatDateTimeWidthModifier(t *testing.T) {
 
 			if width > formatDateTimeMaxMinWidth {
 				_, err := evaluate(t.Context(), nil, minOnly)
-				requireErrorCode(t, err, "FOFD1340")
+				requireErrorCode(t, err, lexicon.ErrFOFD1340)
 				_, err = evaluate(t.Context(), nil, minMax)
-				requireErrorCode(t, err, "FOFD1340")
+				requireErrorCode(t, err, lexicon.ErrFOFD1340)
 			} else {
 				want := formatDateTimePadded(comp, width)
 				result, err := evaluate(t.Context(), nil, minOnly)
@@ -126,7 +128,7 @@ func TestFormatDateTimeWidthOutputBound(t *testing.T) {
 	require.Len(t, result.StringValue(), 50*formatDateTimeMaxMinWidth)
 
 	_, err = evaluate(t.Context(), nil, `format-date(xs:date('2012-05-18'), '[YI,4294967298]')`)
-	requireErrorCode(t, err, "FOFD1340")
+	requireErrorCode(t, err, lexicon.ErrFOFD1340)
 }
 
 // formatDateTimeWidthCase is one picture and the output it must produce.

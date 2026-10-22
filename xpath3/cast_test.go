@@ -338,7 +338,7 @@ func TestCastAtomic(t *testing.T) {
 			v := xpath3.AtomicValue{TypeName: xpath3.TypeDateTimeStamp, Value: mustParseDateTime("2024-03-15T10:30:00")}
 			_, err := xpath3.CastAtomic(v, xpath3.TypeDateTimeStamp)
 			require.Error(t, err)
-			require.Equal(t, "FORG0001", castErrorCode(t, err))
+			require.Equal(t, lexicon.ErrFORG0001, castErrorCode(t, err))
 		})
 
 		t.Run("with timezone accepted", func(t *testing.T) {
@@ -352,7 +352,7 @@ func TestCastAtomic(t *testing.T) {
 			v := xpath3.AtomicValue{TypeName: xpath3.TypeDateTimeStamp, Value: "not-a-time"}
 			_, err := xpath3.CastAtomic(v, xpath3.TypeDateTimeStamp)
 			require.Error(t, err)
-			require.Equal(t, "FORG0001", castErrorCode(t, err))
+			require.Equal(t, lexicon.ErrFORG0001, castErrorCode(t, err))
 		})
 	})
 }
@@ -379,7 +379,7 @@ func TestCastAtomicUserTypeNormalization(t *testing.T) {
 		v := xpath3.AtomicValue{BaseType: xpath3.TypeInteger, Value: big.NewInt(5)}
 		_, err := xpath3.CastAtomic(v, xpath3.TypeInteger)
 		require.Error(t, err)
-		require.Equal(t, "XPTY0004", castErrorCode(t, err))
+		require.Equal(t, lexicon.ErrXPTY0004, castErrorCode(t, err))
 	})
 
 	// PR859-CAST-NORM-002: a NON-XSD BaseType must NOT alter dispatch — it stays
@@ -389,7 +389,7 @@ func TestCastAtomicUserTypeNormalization(t *testing.T) {
 		v := xpath3.AtomicValue{TypeName: "Q{urn:x}Custom", BaseType: "Q{urn:x}Weird", Value: "x"}
 		_, err := xpath3.CastAtomic(v, "Q{urn:x}Weird")
 		require.Error(t, err)
-		require.Equal(t, "XPTY0004", castErrorCode(t, err))
+		require.Equal(t, lexicon.ErrXPTY0004, castErrorCode(t, err))
 	})
 
 	// PR859-CAST-DTS-001: normalization can surface xs:dateTimeStamp from a user
@@ -400,7 +400,7 @@ func TestCastAtomicUserTypeNormalization(t *testing.T) {
 			v := xpath3.AtomicValue{TypeName: "Q{urn:x}MyDTS", BaseType: xpath3.TypeDateTimeStamp, Value: mustParseDateTime("2024-03-15T10:30:00")}
 			_, err := xpath3.CastAtomic(v, xpath3.TypeDateTimeStamp)
 			require.Error(t, err)
-			require.Equal(t, "FORG0001", castErrorCode(t, err))
+			require.Equal(t, lexicon.ErrFORG0001, castErrorCode(t, err))
 		})
 
 		t.Run("with timezone accepted", func(t *testing.T) {
@@ -513,7 +513,7 @@ func TestCastMalformedDateTimeStamp(t *testing.T) {
 					require.Error(t, err)
 					var xerr *xpath3.XPathError
 					require.True(t, errors.As(err, &xerr), "error must be *xpath3.XPathError, got %T: %v", err, err)
-					require.Equal(t, "FORG0001", xerr.Code)
+					require.Equal(t, lexicon.ErrFORG0001, xerr.Code)
 				})
 			})
 		}
@@ -539,7 +539,7 @@ func TestCastToDateTimeStampMalformedSource(t *testing.T) {
 				require.Error(t, err)
 				var xerr *xpath3.XPathError
 				require.True(t, errors.As(err, &xerr), "error must be *xpath3.XPathError, got %T: %v", err, err)
-				require.Equal(t, "FORG0001", xerr.Code)
+				require.Equal(t, lexicon.ErrFORG0001, xerr.Code)
 			})
 		})
 	}
@@ -722,6 +722,6 @@ func TestCastableExprAtomizationError(t *testing.T) {
 		require.Error(t, err, expr)
 		var xerr *xpath3.XPathError
 		require.True(t, errors.As(err, &xerr), "%s: error must be *xpath3.XPathError, got %T: %v", expr, err, err)
-		require.Equal(t, "FOTY0013", xerr.Code, expr)
+		require.Equal(t, lexicon.ErrFOTY0013, xerr.Code, expr)
 	}
 }

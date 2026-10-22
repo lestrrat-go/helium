@@ -5,6 +5,7 @@ import (
 	"strings"
 
 	"github.com/lestrrat-go/helium"
+	"github.com/lestrrat-go/helium/internal/lexicon"
 	"github.com/lestrrat-go/helium/internal/sequence"
 	ixpath "github.com/lestrrat-go/helium/internal/xpath"
 	"github.com/lestrrat-go/helium/xpath3"
@@ -16,9 +17,9 @@ func checkAtomizable(seq xpath3.Sequence) error {
 	for item := range sequence.Items(seq) {
 		switch item.(type) {
 		case xpath3.MapItem:
-			return dynamicError(errCodeFOTY0013, "cannot atomize a map item")
+			return dynamicError(lexicon.ErrFOTY0013, "cannot atomize a map item")
 		case xpath3.FunctionItem:
-			return dynamicError(errCodeFOTY0013, "cannot atomize a function item")
+			return dynamicError(lexicon.ErrFOTY0013, "cannot atomize a function item")
 		}
 	}
 	return nil
@@ -356,7 +357,7 @@ func (ec *execContext) execXSLSequence(ctx context.Context, inst *xslSequenceIns
 					// Inside xsl:where-populated the content is filtered
 					// later, so the order is checked there instead.
 					if !out.wherePopulated && out.hasChildContent(elem) {
-						return dynamicError(errCodeXTDE0410,
+						return dynamicError(lexicon.ErrXTDE0410,
 							"cannot add attribute %s after child nodes have been added", attr.Name())
 					}
 					copyAttributeToElement(elem, attr)
@@ -474,7 +475,7 @@ func (ec *execContext) execXSLSequence(ctx context.Context, inst *xslSequenceIns
 			// appear in result tree content — unless the output method
 			// supports items (json/adaptive).
 			if !out.captureItems && !ec.isItemOutputMethod() {
-				return dynamicError(errCodeXTDE0450,
+				return dynamicError(lexicon.ErrXTDE0450,
 					"cannot add a %T to the result tree", item)
 			}
 			out.pendingItems = append(out.pendingItems, item)
@@ -592,7 +593,7 @@ func (ec *execContext) outputSequence(seq xpath3.Sequence) error {
 			if out.captureItems || ec.isItemOutputMethod() {
 				out.pendingItems = append(out.pendingItems, item)
 			} else {
-				return dynamicError(errCodeXTDE0450,
+				return dynamicError(lexicon.ErrXTDE0450,
 					"cannot add non-node item to the result tree")
 			}
 		}

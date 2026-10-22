@@ -47,7 +47,7 @@ var (
 // Returns XTSE0020 if the value is not valid.
 func validateBooleanAttr(elemName, attrName, value string) error {
 	if _, ok := parseXSDBool(value); !ok {
-		return staticError(errCodeXTSE0020, "%q is not a valid value for %s/@%s", value, elemName, attrName)
+		return staticError(lexicon.ErrXTSE0020, "%q is not a valid value for %s/@%s", value, elemName, attrName)
 	}
 	return nil
 }
@@ -85,7 +85,7 @@ func (c *compiler) validateXSLTAttrs(_ context.Context, elem *helium.Element, al
 			if fc {
 				continue
 			}
-			return staticError(errCodeXTSE0090,
+			return staticError(lexicon.ErrXTSE0090,
 				"attribute %q in the XSLT namespace is not allowed on xsl:%s", attr.LocalName(), elem.LocalName())
 		}
 		// Skip attributes in other (non-null) namespaces — those are extension attributes
@@ -106,7 +106,7 @@ func (c *compiler) validateXSLTAttrs(_ context.Context, elem *helium.Element, al
 		if fc {
 			continue
 		}
-		return staticError(errCodeXTSE0090,
+		return staticError(lexicon.ErrXTSE0090,
 			"attribute %q is not allowed on xsl:%s", name, elem.LocalName())
 	}
 	return nil
@@ -119,7 +119,7 @@ func validateValidationAttr(elemName, validation string) error {
 	case validationStrict, validationLax, validationPreserve, validationStrip:
 		return nil
 	default:
-		return staticError(errCodeXTSE0020, "invalid value %q for %s/@validation: must be strict, lax, preserve, or strip", validation, elemName)
+		return staticError(lexicon.ErrXTSE0020, "invalid value %q for %s/@validation: must be strict, lax, preserve, or strip", validation, elemName)
 	}
 }
 
@@ -136,7 +136,7 @@ func (c *compiler) checkTypeAttrSchemaAware(_ context.Context, elemName, typeNam
 	if len(c.stylesheet.schemas) > 0 || c.stylesheet.schemaAware {
 		return nil
 	}
-	return staticError(errCodeXTSE0215, "%s/@type requires a schema import (xsl:import-schema)", elemName)
+	return staticError(lexicon.ErrXTSE0215, "%s/@type requires a schema import (xsl:import-schema)", elemName)
 }
 
 // isBuiltinXSDTypeName reports whether typeName refers to the built-in XSD
@@ -158,7 +158,7 @@ func isBuiltinXSDTypeName(typeName string, ns map[string]string) bool {
 // specified on the same instruction. Returns XTSE0220 if both are present.
 func checkValidationTypeExclusive(elemName, validation, typeName string) error {
 	if validation != "" && typeName != "" {
-		return staticError(errCodeXTSE0220, "%s: validation and type attributes are mutually exclusive", elemName)
+		return staticError(lexicon.ErrXTSE0220, "%s: validation and type attributes are mutually exclusive", elemName)
 	}
 	return nil
 }
@@ -201,7 +201,7 @@ func (c *compiler) compileInstruction(ctx context.Context, elem *helium.Element)
 	if elem.URI() == lexicon.NamespaceXSLT {
 		for _, attr := range elem.Attributes() {
 			if attr.URI() == lexicon.NamespaceXSLT {
-				return nil, staticError(errCodeXTSE0090,
+				return nil, staticError(lexicon.ErrXTSE0090,
 					"attribute %q in the XSLT namespace is not allowed on xsl:%s", attr.LocalName(), elem.LocalName())
 			}
 		}
@@ -238,14 +238,14 @@ func (c *compiler) compileInstruction(ctx context.Context, elem *helium.Element)
 			c.expandText = v
 		} else if elem.URI() == lexicon.NamespaceXSLT {
 			// XTSE0020: invalid boolean value for expand-text on XSLT element
-			return nil, staticError(errCodeXTSE0020, "%q is not a valid value for xsl:%s/@expand-text", et, elem.LocalName())
+			return nil, staticError(lexicon.ErrXTSE0020, "%q is not a valid value for xsl:%s/@expand-text", et, elem.LocalName())
 		}
 	} else if et, ok := elem.GetAttributeNS("expand-text", lexicon.NamespaceXSLT); ok {
 		if v, ok := parseXSDBool(et); ok {
 			c.expandText = v
 		} else {
 			// XTSE0020: invalid boolean value for xsl:expand-text on LRE
-			return nil, staticError(errCodeXTSE0020, "%q is not a valid value for xsl:expand-text", et)
+			return nil, staticError(lexicon.ErrXTSE0020, "%q is not a valid value for xsl:expand-text", et)
 		}
 	}
 	defer func() { c.expandText = savedExpandText }()
@@ -451,7 +451,7 @@ func (c *compiler) evaluateUseWhen(ctx context.Context, expr string) (bool, erro
 	compiled, err := xpath3.NewCompiler().Compile(expr)
 	if err != nil {
 		// XPST0003: invalid XPath in use-when is a static error
-		return false, staticError(errCodeXPST0003,
+		return false, staticError(lexicon.ErrXPST0003,
 			"invalid XPath expression in use-when: %s: %v", expr, err)
 	}
 
@@ -483,14 +483,14 @@ func (c *compiler) useWhenFunctionAvailable(_ context.Context, args []xpath3.Seq
 
 	// XTDE1400: function name must be a valid QName
 	if !strings.HasPrefix(name, "Q{") && !xmlchar.IsValidQName(name) {
-		return nil, dynamicError(errCodeXTDE1400,
+		return nil, dynamicError(lexicon.ErrXTDE1400,
 			"function-available: %q is not a valid QName", name)
 	}
 
 	// Check for undeclared prefix (XTDE1400)
 	if prefix, _, ok := strings.Cut(name, ":"); ok {
 		if _, ok := c.nsBindings[prefix]; !ok {
-			return nil, dynamicError(errCodeXTDE1400,
+			return nil, dynamicError(lexicon.ErrXTDE1400,
 				"undeclared namespace prefix %q in function-available(%q)", prefix, name)
 		}
 	}
@@ -677,7 +677,7 @@ func (c *compiler) compileXSLTInstruction(ctx context.Context, elem *helium.Elem
 		// XTSE0010: xsl:param is only allowed at the top of xsl:template,
 		// xsl:function, or xsl:iterate. If we reach here, it means
 		// xsl:param appears in a general sequence constructor context.
-		return nil, staticError(errCodeXTSE0010,
+		return nil, staticError(lexicon.ErrXTSE0010,
 			"xsl:param is not allowed in this position; it must appear at the start of xsl:template, xsl:function, or xsl:iterate")
 	case lexicon.XSLTElementCopy:
 		return c.compileCopy(ctx, elem)
@@ -712,7 +712,7 @@ func (c *compiler) compileXSLTInstruction(ctx context.Context, elem *helium.Elem
 		if hv := getAttr(elem, paramHTMLVersion); hv != "" {
 			if !strings.ContainsAny(hv, "{}") {
 				if _, err := strconv.ParseFloat(hv, 64); err != nil {
-					return nil, staticError(errCodeXTSE0020, "%q is not a valid value for xsl:result-document/@html-version", hv)
+					return nil, staticError(lexicon.ErrXTSE0020, "%q is not a valid value for xsl:result-document/@html-version", hv)
 				}
 			}
 		}
@@ -722,7 +722,7 @@ func (c *compiler) compileXSLTInstruction(ctx context.Context, elem *helium.Elem
 			if v := getAttr(elem, boolAttr); v != "" {
 				if !strings.ContainsAny(v, "{}") {
 					if _, ok := parseXSDBool(v); !ok {
-						return nil, staticError(errCodeSEPM0016, "%q is not a valid value for xsl:result-document/@%s", v, boolAttr)
+						return nil, staticError(lexicon.ErrSEPM0016, "%q is not a valid value for xsl:result-document/@%s", v, boolAttr)
 					}
 				}
 			}
@@ -735,7 +735,7 @@ func (c *compiler) compileXSLTInstruction(ctx context.Context, elem *helium.Elem
 				case lexicon.ValueYes, lexicon.ValueNo, lexicon.ValueOmit, "true", lexicon.ValueFalse, "1", "0":
 					// valid
 				default:
-					return nil, staticError(errCodeSEPM0016, "%q is not a valid value for xsl:result-document/@standalone", v)
+					return nil, staticError(lexicon.ErrSEPM0016, "%q is not a valid value for xsl:result-document/@standalone", v)
 				}
 			}
 		}
@@ -907,7 +907,7 @@ func (c *compiler) compileXSLTInstruction(ctx context.Context, elem *helium.Elem
 		// xsl:for-each, xsl:for-each-group, or xsl:perform-sort.
 		// Those instructions handle xsl:sort directly; if we reach here, xsl:sort
 		// appears in an invalid context (e.g. inside xsl:template body or xsl:call-template).
-		return nil, staticError(errCodeXTSE0010,
+		return nil, staticError(lexicon.ErrXTSE0010,
 			"xsl:sort is not allowed in this position")
 	case lexicon.XSLTElementFallback:
 		// xsl:fallback is only activated when the parent is unrecognized;
@@ -942,17 +942,17 @@ func (c *compiler) compileXSLTInstruction(ctx context.Context, elem *helium.Elem
 		return c.compileMerge(ctx, elem)
 	case lexicon.XSLTElementMergeSource:
 		// xsl:merge-source must be a direct child of xsl:merge
-		return nil, staticError(errCodeXTSE0010, "xsl:merge-source must be a direct child of xsl:merge")
+		return nil, staticError(lexicon.ErrXTSE0010, "xsl:merge-source must be a direct child of xsl:merge")
 	case lexicon.XSLTElementMergeAction:
 		// xsl:merge-action must be a direct child of xsl:merge
-		return nil, staticError(errCodeXTSE0010, "xsl:merge-action must be a direct child of xsl:merge")
+		return nil, staticError(lexicon.ErrXTSE0010, "xsl:merge-action must be a direct child of xsl:merge")
 	case lexicon.XSLTElementMergeKey:
 		// xsl:merge-key must be a direct child of xsl:merge-source
-		return nil, staticError(errCodeXTSE0010, "xsl:merge-key must be a direct child of xsl:merge-source")
+		return nil, staticError(lexicon.ErrXTSE0010, "xsl:merge-key must be a direct child of xsl:merge-source")
 	case lexicon.XSLTElementOnCompletion:
 		// xsl:on-completion must be a direct child of xsl:iterate — if we reach
 		// here, it was encountered outside that context.
-		return nil, staticError(errCodeXTSE0010, "xsl:on-completion must be a direct child of xsl:iterate")
+		return nil, staticError(lexicon.ErrXTSE0010, "xsl:on-completion must be a direct child of xsl:iterate")
 	default:
 		// Forwards-compatible processing (XSLT 3.0 §3.8): if the effective
 		// version > 3.0, unknown instructions are allowed and
@@ -960,7 +960,7 @@ func (c *compiler) compileXSLTInstruction(ctx context.Context, elem *helium.Elem
 		if c.effectiveVersion > "3.0" {
 			return c.compileForwardsCompat(ctx, elem)
 		}
-		return nil, staticError(errCodeXTSE0090, "unknown XSLT instruction xsl:%s", elem.LocalName())
+		return nil, staticError(lexicon.ErrXTSE0090, "unknown XSLT instruction xsl:%s", elem.LocalName())
 	}
 }
 
@@ -1015,12 +1015,12 @@ func (c *compiler) compileChildren(ctx context.Context, parent *helium.Element) 
 			if inst != nil {
 				// XTSE3120: nothing may follow xsl:break or xsl:next-iteration.
 				if sawTerminator {
-					return nil, staticError(errCodeXTSE3120, "no instruction may follow xsl:break or xsl:next-iteration")
+					return nil, staticError(lexicon.ErrXTSE3120, "no instruction may follow xsl:break or xsl:next-iteration")
 				}
 				// XTSE0010: xsl:on-empty must be the last instruction in a sequence constructor.
 				// Only xsl:fallback (which compiles to nil) may follow it.
 				if sawOnEmpty {
-					return nil, staticError(errCodeXTSE0010, "xsl:on-empty must be the last instruction in a sequence constructor")
+					return nil, staticError(lexicon.ErrXTSE0010, "xsl:on-empty must be the last instruction in a sequence constructor")
 				}
 				body = append(body, inst)
 				switch inst.(type) {
@@ -1055,10 +1055,10 @@ func (c *compiler) compileChildren(ctx context.Context, parent *helium.Element) 
 			text := buf.String()
 			if !c.shouldStripText(ctx, text) {
 				if sawTerminator {
-					return nil, staticError(errCodeXTSE3120, "no instruction may follow xsl:break or xsl:next-iteration")
+					return nil, staticError(lexicon.ErrXTSE3120, "no instruction may follow xsl:break or xsl:next-iteration")
 				}
 				if sawOnEmpty {
-					return nil, staticError(errCodeXTSE0010, "xsl:on-empty must be the last instruction in a sequence constructor")
+					return nil, staticError(lexicon.ErrXTSE0010, "xsl:on-empty must be the last instruction in a sequence constructor")
 				}
 				inst := &literalTextInst{Value: text}
 				if c.expandText && strings.ContainsAny(text, "{}") {
@@ -1078,7 +1078,7 @@ func (c *compiler) compileChildren(ctx context.Context, parent *helium.Element) 
 func (c *compiler) compileLocalVariable(ctx context.Context, elem *helium.Element) (*variableInst, error) {
 	name := getAttr(elem, "name")
 	if name == "" {
-		return nil, staticError(errCodeXTSE0110, "xsl:variable requires name attribute")
+		return nil, staticError(lexicon.ErrXTSE0110, "xsl:variable requires name attribute")
 	}
 
 	asAttr := c.resolveAsType(ctx, getAttr(elem, "as"))
@@ -1101,7 +1101,7 @@ func (c *compiler) compileLocalVariable(ctx context.Context, elem *helium.Elemen
 	if selectAttr != "" {
 		// XTSE0620: select and non-empty content are mutually exclusive.
 		if err := c.validateEmptyElement(ctx, elem, "xsl:variable"); err != nil {
-			return nil, staticError(errCodeXTSE0620, "xsl:variable %q has both @select and content", name)
+			return nil, staticError(lexicon.ErrXTSE0620, "xsl:variable %q has both @select and content", name)
 		}
 		expr, err := c.compileXPath(selectAttr, c.nsBindings)
 		if err != nil {
@@ -1146,7 +1146,7 @@ func (c *compiler) compileMessage(ctx context.Context, elem *helium.Element) (*m
 		// If the avt is a static value, validate it is "yes" or "no"
 		if sv, ok := avt.staticValue(); ok {
 			if sv != lexicon.ValueYes && sv != lexicon.ValueNo {
-				return nil, staticError(errCodeXTSE0020, "%q is not a valid value for xsl:message/@terminate", sv)
+				return nil, staticError(lexicon.ErrXTSE0020, "%q is not a valid value for xsl:message/@terminate", sv)
 			}
 		}
 		inst.Terminate = avt
@@ -1183,13 +1183,13 @@ func (c *compiler) compileMapEntry(ctx context.Context, elem *helium.Element) (*
 		}
 		inst.Key = expr
 	} else {
-		return nil, staticError(errCodeXTSE0010, "xsl:map-entry requires key attribute")
+		return nil, staticError(lexicon.ErrXTSE0010, "xsl:map-entry requires key attribute")
 	}
 
 	selectAttr := getAttr(elem, "select")
 	hasBody := hasSignificantChildren(elem)
 	if selectAttr != "" && hasBody {
-		return nil, staticError(errCodeXTSE3280, "xsl:map-entry must not have both a select attribute and a sequence constructor body")
+		return nil, staticError(lexicon.ErrXTSE3280, "xsl:map-entry must not have both a select attribute and a sequence constructor body")
 	}
 	if selectAttr != "" {
 		expr, err := c.compileXPath(selectAttr, c.nsBindings)
@@ -1215,7 +1215,7 @@ func (c *compiler) compileMapEntry(ctx context.Context, elem *helium.Element) (*
 func (c *compiler) compileAssert(ctx context.Context, elem *helium.Element) (instruction, error) {
 	testAttr := getAttr(elem, "test")
 	if testAttr == "" {
-		return nil, staticError(errCodeXTSE0010, "xsl:assert requires a test attribute")
+		return nil, staticError(lexicon.ErrXTSE0010, "xsl:assert requires a test attribute")
 	}
 
 	testExpr, err := c.compileXPath(testAttr, c.nsBindings)
@@ -1225,7 +1225,7 @@ func (c *compiler) compileAssert(ctx context.Context, elem *helium.Element) (ins
 
 	inst := &assertInst{
 		Test:      testExpr,
-		ErrorCode: errCodeXTMM9001, // default error code per XSLT 3.0 spec
+		ErrorCode: lexicon.ErrXTMM9001, // default error code per XSLT 3.0 spec
 	}
 
 	// xpath-default-namespace

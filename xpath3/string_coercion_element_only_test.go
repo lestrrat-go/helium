@@ -5,6 +5,7 @@ import (
 	"testing"
 
 	"github.com/lestrrat-go/helium"
+	"github.com/lestrrat-go/helium/internal/lexicon"
 	"github.com/lestrrat-go/helium/xpath3"
 	"github.com/stretchr/testify/require"
 )
@@ -40,7 +41,7 @@ func TestStringArgElementOnlyRaisesFOTY0012(t *testing.T) {
 		require.Error(t, err)
 		var xerr *xpath3.XPathError
 		require.True(t, errors.As(err, &xerr), "want *xpath3.XPathError, got %T: %v", err, err)
-		require.Equal(t, "FOTY0012", xerr.Code)
+		require.Equal(t, lexicon.ErrFOTY0012, xerr.Code)
 	}
 
 	// string-length/1, normalize-space/1 and upper-case/1 each declare an
@@ -191,7 +192,7 @@ func TestDocFamilyCardinalityFlattens(t *testing.T) {
 		require.Error(t, err)
 		var xerr *xpath3.XPathError
 		require.True(t, errors.As(err, &xerr))
-		require.Equal(t, "XPTY0004", xerr.Code)
+		require.Equal(t, lexicon.ErrXPTY0004, xerr.Code)
 	})
 }
 
@@ -276,7 +277,7 @@ func TestStringCoercionAtomizedEmptyResult(t *testing.T) {
 		require.Error(t, err)
 		var xerr *xpath3.XPathError
 		require.True(t, errors.As(err, &xerr))
-		require.Equal(t, "XPTY0004", xerr.Code)
+		require.Equal(t, lexicon.ErrXPTY0004, xerr.Code)
 	})
 }
 
@@ -311,7 +312,7 @@ func TestDynamicCallElementOnlyRaisesFOTY0012(t *testing.T) {
 		require.Error(t, err)
 		var xerr *xpath3.XPathError
 		require.True(t, errors.As(err, &xerr), "want *xpath3.XPathError, got %T: %v", err, err)
-		require.Equal(t, "FOTY0012", xerr.Code)
+		require.Equal(t, lexicon.ErrFOTY0012, xerr.Code)
 	}
 
 	// Named function reference invoked through a higher-order function.

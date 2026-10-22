@@ -4,6 +4,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/lestrrat-go/helium/internal/lexicon"
 	"github.com/lestrrat-go/helium/xpath3"
 	"github.com/stretchr/testify/require"
 )
@@ -297,14 +298,14 @@ func TestSerialize_ParamNegativeCases(t *testing.T) {
 		require.Error(t, err)
 		var xerr *xpath3.XPathError
 		require.ErrorAs(t, err, &xerr)
-		require.Equal(t, "SEPM0010", xerr.Code)
+		require.Equal(t, lexicon.ErrSEPM0010, xerr.Code)
 
 		// Absent version defaults to 1.0, so it is also SEPM0010.
 		_, err = evaluate(t.Context(), doc,
 			`serialize(., map{"method":"xml","undeclare-prefixes":true()})`)
 		require.Error(t, err)
 		require.ErrorAs(t, err, &xerr)
-		require.Equal(t, "SEPM0010", xerr.Code)
+		require.Equal(t, lexicon.ErrSEPM0010, xerr.Code)
 	})
 
 	t.Run("undeclare-prefixes ignored for non-applicable method (html)", func(t *testing.T) {
@@ -336,7 +337,7 @@ func TestSerialize_ParamNegativeCases(t *testing.T) {
 		require.Error(t, err)
 		var xerr *xpath3.XPathError
 		require.ErrorAs(t, err, &xerr)
-		require.Equal(t, "SEPM0016", xerr.Code)
+		require.Equal(t, lexicon.ErrSEPM0016, xerr.Code)
 
 		// text/adaptive ignore doctype-system, so the same value raises no error
 		// and serialization proceeds.
@@ -431,7 +432,7 @@ func TestSerialize_OutputVersionAndNsResolution(t *testing.T) {
 		require.Error(t, err)
 		var xerr *xpath3.XPathError
 		require.ErrorAs(t, err, &xerr)
-		require.Equal(t, "XPTY0004", xerr.Code)
+		require.Equal(t, lexicon.ErrXPTY0004, xerr.Code)
 	})
 }
 
@@ -450,7 +451,7 @@ func TestSerialize_SEPM0009(t *testing.T) {
 		require.Error(t, err)
 		var xerr *xpath3.XPathError
 		require.ErrorAs(t, err, &xerr)
-		require.Equal(t, "SEPM0009", xerr.Code)
+		require.Equal(t, lexicon.ErrSEPM0009, xerr.Code)
 	}
 
 	requireNoError := func(t *testing.T, expr string) {
@@ -488,7 +489,7 @@ func TestSerialize_SEPM0009(t *testing.T) {
 		require.Error(t, err)
 		var xerr *xpath3.XPathError
 		require.ErrorAs(t, err, &xerr)
-		require.Equal(t, "SEPM0009", xerr.Code)
+		require.Equal(t, lexicon.ErrSEPM0009, xerr.Code)
 	})
 }
 
@@ -526,7 +527,7 @@ func TestSerialize_ElementFormSchemaTypes(t *testing.T) {
 		require.Error(t, err)
 		var xerr *xpath3.XPathError
 		require.ErrorAs(t, err, &xerr)
-		require.Equal(t, "XPTY0004", xerr.Code)
+		require.Equal(t, lexicon.ErrXPTY0004, xerr.Code)
 	}
 
 	requireSEPM0009 := func(t *testing.T, standaloneValue string) {
@@ -538,7 +539,7 @@ func TestSerialize_ElementFormSchemaTypes(t *testing.T) {
 		require.Error(t, err)
 		var xerr *xpath3.XPathError
 		require.ErrorAs(t, err, &xerr)
-		require.Equal(t, "SEPM0009", xerr.Code, "standalone=%q", standaloneValue)
+		require.Equal(t, lexicon.ErrSEPM0009, xerr.Code, "standalone=%q", standaloneValue)
 	}
 
 	// Finding 1: element-form standalone now accepts the boolean lexical families
@@ -659,7 +660,7 @@ func TestSerialize_ElementFormValueValidation(t *testing.T) {
 		require.Error(t, err)
 		var xerr *xpath3.XPathError
 		require.ErrorAs(t, err, &xerr)
-		require.Equal(t, "XPTY0004", xerr.Code)
+		require.Equal(t, lexicon.ErrXPTY0004, xerr.Code)
 	}
 	requireOK := func(t *testing.T, paramsXML string) {
 		t.Helper()
@@ -693,7 +694,7 @@ func TestSerialize_ElementFormValueValidation(t *testing.T) {
 		require.Error(t, err)
 		var xerr *xpath3.XPathError
 		require.ErrorAs(t, err, &xerr)
-		require.Equal(t, "SESU0011", xerr.Code)
+		require.Equal(t, lexicon.ErrSESU0011, xerr.Code)
 	})
 
 	// Finding 3: NBSP is not XSD whitespace, so NBSP-only content is significant.
@@ -735,7 +736,7 @@ func TestSerialize_TextMethodAndHonesty(t *testing.T) {
 		require.Error(t, err)
 		var xerr *xpath3.XPathError
 		require.ErrorAs(t, err, &xerr)
-		require.Equal(t, "SESU0011", xerr.Code)
+		require.Equal(t, lexicon.ErrSESU0011, xerr.Code)
 	})
 
 	t.Run("map-form normalization-form bogus is XPTY0004", func(t *testing.T) {
@@ -744,7 +745,7 @@ func TestSerialize_TextMethodAndHonesty(t *testing.T) {
 		require.Error(t, err)
 		var xerr *xpath3.XPathError
 		require.ErrorAs(t, err, &xerr)
-		require.Equal(t, "XPTY0004", xerr.Code)
+		require.Equal(t, lexicon.ErrXPTY0004, xerr.Code)
 	})
 
 	t.Run("map-form byte-order-mark bad value is XPTY0004", func(t *testing.T) {
@@ -753,7 +754,7 @@ func TestSerialize_TextMethodAndHonesty(t *testing.T) {
 		require.Error(t, err)
 		var xerr *xpath3.XPathError
 		require.ErrorAs(t, err, &xerr)
-		require.Equal(t, "XPTY0004", xerr.Code)
+		require.Equal(t, lexicon.ErrXPTY0004, xerr.Code)
 	})
 
 	t.Run("map-form json-node-output-method bad value is XPTY0004", func(t *testing.T) {
@@ -762,7 +763,7 @@ func TestSerialize_TextMethodAndHonesty(t *testing.T) {
 		require.Error(t, err)
 		var xerr *xpath3.XPathError
 		require.ErrorAs(t, err, &xerr)
-		require.Equal(t, "XPTY0004", xerr.Code)
+		require.Equal(t, lexicon.ErrXPTY0004, xerr.Code)
 	})
 
 	t.Run("media-type is used in the html Content-Type meta", func(t *testing.T) {
@@ -804,7 +805,7 @@ func TestSerialize_DoctypeMethodAndMeta(t *testing.T) {
 		require.Error(t, err)
 		var xerr *xpath3.XPathError
 		require.ErrorAs(t, err, &xerr)
-		require.Equal(t, "XPTY0004", xerr.Code)
+		require.Equal(t, lexicon.ErrXPTY0004, xerr.Code)
 	})
 
 	t.Run("map-form extension-method QName is unsupported (SEPM0016)", func(t *testing.T) {
@@ -816,7 +817,7 @@ func TestSerialize_DoctypeMethodAndMeta(t *testing.T) {
 		require.Error(t, err)
 		var xerr *xpath3.XPathError
 		require.ErrorAs(t, err, &xerr)
-		require.Equal(t, "SEPM0016", xerr.Code)
+		require.Equal(t, lexicon.ErrSEPM0016, xerr.Code)
 	})
 
 	// Per Serialization 3.1 SEPM0009, the doctype-system sub-condition is gated on
@@ -847,7 +848,7 @@ func TestSerialize_DoctypeMethodAndMeta(t *testing.T) {
 		require.Error(t, err)
 		var xerr *xpath3.XPathError
 		require.ErrorAs(t, err, &xerr)
-		require.Equal(t, "SEPM0009", xerr.Code)
+		require.Equal(t, lexicon.ErrSEPM0009, xerr.Code)
 	})
 
 	t.Run("XML doctype-system is emitted", func(t *testing.T) {
@@ -932,7 +933,7 @@ func TestSerialize_DoctypeMethodAndMeta(t *testing.T) {
 		require.Error(t, err)
 		var xerr *xpath3.XPathError
 		require.ErrorAs(t, err, &xerr)
-		require.Equal(t, "SEPM0016", xerr.Code)
+		require.Equal(t, lexicon.ErrSEPM0016, xerr.Code)
 	})
 
 	t.Run("element input serialize does not mutate the caller's tree", func(t *testing.T) {
@@ -968,13 +969,13 @@ func TestSerialize_MethodVersionAndCharMapAudit(t *testing.T) {
 	}
 
 	t.Run("map-form method bogus bare NCName errors", func(t *testing.T) {
-		requireCode(t, `serialize(., map{"method":"bogus"})`, "XPTY0004")
+		requireCode(t, `serialize(., map{"method":"bogus"})`, lexicon.ErrXPTY0004)
 	})
 	t.Run("map-form method extension QName is unsupported SEPM0016", func(t *testing.T) {
-		requireCode(t, `serialize(., map{"method":"ex:custom","omit-xml-declaration":true()})`, "SEPM0016")
+		requireCode(t, `serialize(., map{"method":"ex:custom","omit-xml-declaration":true()})`, lexicon.ErrSEPM0016)
 	})
 	t.Run("map-form method EQName extension is unsupported SEPM0016", func(t *testing.T) {
-		requireCode(t, `serialize(., map{"method":"Q{urn:x}custom","omit-xml-declaration":true()})`, "SEPM0016")
+		requireCode(t, `serialize(., map{"method":"Q{urn:x}custom","omit-xml-declaration":true()})`, lexicon.ErrSEPM0016)
 	})
 	t.Run("element-form method bogus bare NCName is XPTY0004", func(t *testing.T) {
 		_, err := runElementFormParams(t, `<root/>`,
@@ -983,14 +984,14 @@ func TestSerialize_MethodVersionAndCharMapAudit(t *testing.T) {
 		require.Error(t, err)
 		var xerr *xpath3.XPathError
 		require.ErrorAs(t, err, &xerr)
-		require.Equal(t, "XPTY0004", xerr.Code)
+		require.Equal(t, lexicon.ErrXPTY0004, xerr.Code)
 	})
 
 	t.Run("map-form json-node-output-method rejects json", func(t *testing.T) {
-		requireCode(t, `serialize(., map{"json-node-output-method":"json"})`, "XPTY0004")
+		requireCode(t, `serialize(., map{"json-node-output-method":"json"})`, lexicon.ErrXPTY0004)
 	})
 	t.Run("map-form json-node-output-method rejects adaptive", func(t *testing.T) {
-		requireCode(t, `serialize(., map{"json-node-output-method":"adaptive"})`, "XPTY0004")
+		requireCode(t, `serialize(., map{"json-node-output-method":"adaptive"})`, lexicon.ErrXPTY0004)
 	})
 	t.Run("map-form json-node-output-method accepts text", func(t *testing.T) {
 		doc := mustParseXML(t, `<root/>`)
@@ -999,10 +1000,10 @@ func TestSerialize_MethodVersionAndCharMapAudit(t *testing.T) {
 	})
 
 	t.Run("map-form version bogus is SESU0013", func(t *testing.T) {
-		requireCode(t, `serialize(., map{"method":"xml","omit-xml-declaration":false(),"version":"bogus"})`, "SESU0013")
+		requireCode(t, `serialize(., map{"method":"xml","omit-xml-declaration":false(),"version":"bogus"})`, lexicon.ErrSESU0013)
 	})
 	t.Run("map-form version 1.2 unsupported is SESU0013", func(t *testing.T) {
-		requireCode(t, `serialize(., map{"method":"xml","omit-xml-declaration":false(),"version":"1.2"})`, "SESU0013")
+		requireCode(t, `serialize(., map{"method":"xml","omit-xml-declaration":false(),"version":"1.2"})`, lexicon.ErrSESU0013)
 	})
 	t.Run("element-form version bogus is SESU0013", func(t *testing.T) {
 		_, err := runElementFormParams(t, `<root/>`,
@@ -1011,7 +1012,7 @@ func TestSerialize_MethodVersionAndCharMapAudit(t *testing.T) {
 		require.Error(t, err)
 		var xerr *xpath3.XPathError
 		require.ErrorAs(t, err, &xerr)
-		require.Equal(t, "SESU0013", xerr.Code)
+		require.Equal(t, lexicon.ErrSESU0013, xerr.Code)
 	})
 	t.Run("map-form version 1.1 is accepted", func(t *testing.T) {
 		doc := mustParseXML(t, `<root/>`)
@@ -1122,7 +1123,7 @@ func TestSerialize_NormalizationJSONNodeAndQNameMethod(t *testing.T) {
 		require.Error(t, err)
 		var xerr *xpath3.XPathError
 		require.ErrorAs(t, err, &xerr)
-		require.Equal(t, "SEPM0016", xerr.Code)
+		require.Equal(t, lexicon.ErrSEPM0016, xerr.Code)
 	})
 	t.Run("json-node-output-method xml (default) over a node is fine", func(t *testing.T) {
 		doc := mustParseXML(t, `<a>x</a>`)
@@ -1147,7 +1148,7 @@ func TestSerialize_NormalizationJSONNodeAndQNameMethod(t *testing.T) {
 		require.Error(t, err)
 		var xerr *xpath3.XPathError
 		require.ErrorAs(t, err, &xerr)
-		require.Equal(t, "SEPM0016", xerr.Code)
+		require.Equal(t, lexicon.ErrSEPM0016, xerr.Code)
 	})
 	t.Run("map-form no-namespace non-builtin QName method is invalid XPTY0004", func(t *testing.T) {
 		doc := mustParseXML(t, `<root/>`)
@@ -1156,7 +1157,7 @@ func TestSerialize_NormalizationJSONNodeAndQNameMethod(t *testing.T) {
 		require.Error(t, err)
 		var xerr *xpath3.XPathError
 		require.ErrorAs(t, err, &xerr)
-		require.Equal(t, "XPTY0004", xerr.Code)
+		require.Equal(t, lexicon.ErrXPTY0004, xerr.Code)
 	})
 	t.Run("map-form no-namespace QName method (even builtin local) is invalid XPTY0004", func(t *testing.T) {
 		// F&O 3.1: an xs:QName method value must have a non-absent namespace;
@@ -1167,7 +1168,7 @@ func TestSerialize_NormalizationJSONNodeAndQNameMethod(t *testing.T) {
 		require.Error(t, err)
 		var xerr *xpath3.XPathError
 		require.ErrorAs(t, err, &xerr)
-		require.Equal(t, "XPTY0004", xerr.Code)
+		require.Equal(t, lexicon.ErrXPTY0004, xerr.Code)
 	})
 	t.Run("map-form string builtin method is accepted", func(t *testing.T) {
 		doc := mustParseXML(t, `<root>hi</root>`)
@@ -1349,7 +1350,7 @@ func TestSerialize_NormalizationCharMapAndEmptyDefaults(t *testing.T) {
 		require.Error(t, err)
 		var xerr *xpath3.XPathError
 		require.ErrorAs(t, err, &xerr)
-		require.Equal(t, "SEPM0016", xerr.Code)
+		require.Equal(t, lexicon.ErrSEPM0016, xerr.Code)
 	})
 	// F&O 3.1: an xs:QName json-node-output-method value must have a non-absent
 	// namespace, so ANY no-namespace QName (domain token, xml, or otherwise) is an
@@ -1361,7 +1362,7 @@ func TestSerialize_NormalizationCharMapAndEmptyDefaults(t *testing.T) {
 		require.Error(t, err)
 		var xerr *xpath3.XPathError
 		require.ErrorAs(t, err, &xerr)
-		require.Equal(t, "XPTY0004", xerr.Code)
+		require.Equal(t, lexicon.ErrXPTY0004, xerr.Code)
 	})
 	t.Run("json-node-output-method no-namespace QName (non-domain) is XPTY0004", func(t *testing.T) {
 		doc := mustParseXML(t, `<a>x</a>`)
@@ -1370,7 +1371,7 @@ func TestSerialize_NormalizationCharMapAndEmptyDefaults(t *testing.T) {
 		require.Error(t, err)
 		var xerr *xpath3.XPathError
 		require.ErrorAs(t, err, &xerr)
-		require.Equal(t, "XPTY0004", xerr.Code)
+		require.Equal(t, lexicon.ErrXPTY0004, xerr.Code)
 	})
 	t.Run("json-node-output-method no-namespace QName xml is XPTY0004", func(t *testing.T) {
 		doc := mustParseXML(t, `<a>x</a>`)
@@ -1379,7 +1380,7 @@ func TestSerialize_NormalizationCharMapAndEmptyDefaults(t *testing.T) {
 		require.Error(t, err)
 		var xerr *xpath3.XPathError
 		require.ErrorAs(t, err, &xerr)
-		require.Equal(t, "XPTY0004", xerr.Code)
+		require.Equal(t, lexicon.ErrXPTY0004, xerr.Code)
 	})
 	t.Run("json-node-output-method string xml (default) over a node is fine", func(t *testing.T) {
 		doc := mustParseXML(t, `<a>x</a>`)
@@ -1554,7 +1555,7 @@ func TestSerialize_EncodingDeclarationAndDoctypeSystemQuotes(t *testing.T) {
 		require.Error(t, err)
 		var xerr *xpath3.XPathError
 		require.ErrorAs(t, err, &xerr)
-		require.Equal(t, "SEPM0016", xerr.Code)
+		require.Equal(t, lexicon.ErrSEPM0016, xerr.Code)
 	})
 
 	t.Run("doctype-system with only a double quote is accepted", func(t *testing.T) {
@@ -1654,7 +1655,7 @@ func TestSerialize_TextMethodSENR0001(t *testing.T) {
 		require.Error(t, err)
 		var xerr *xpath3.XPathError
 		require.ErrorAs(t, err, &xerr)
-		require.Equal(t, "SENR0001", xerr.Code)
+		require.Equal(t, lexicon.ErrSENR0001, xerr.Code)
 	}
 
 	t.Run("attribute node", func(t *testing.T) {
@@ -1688,7 +1689,7 @@ func TestSerialize_FunctionItemSENR0001(t *testing.T) {
 
 	for _, method := range []string{"xml", "xhtml", "html", "text"} {
 		t.Run(method+" raises SENR0001", func(t *testing.T) {
-			requireCode(t, method, "SENR0001")
+			requireCode(t, method, lexicon.ErrSENR0001)
 		})
 	}
 	// The unspecified default (xml family) also raises SENR0001.
@@ -1698,12 +1699,12 @@ func TestSerialize_FunctionItemSENR0001(t *testing.T) {
 		require.Error(t, err)
 		var xerr *xpath3.XPathError
 		require.ErrorAs(t, err, &xerr)
-		require.Equal(t, "SENR0001", xerr.Code)
+		require.Equal(t, lexicon.ErrSENR0001, xerr.Code)
 	})
 	// adaptive and json are exempt from the SENR0001 sequence-normalization guard.
 	for _, method := range []string{"adaptive", "json"} {
 		t.Run(method+" is exempt (FOER0000)", func(t *testing.T) {
-			requireCode(t, method, "FOER0000")
+			requireCode(t, method, lexicon.ErrFOER0000)
 		})
 	}
 }
@@ -1726,7 +1727,7 @@ func TestSerialize_MapSENR0001AndArrayFlattening(t *testing.T) {
 		require.Error(t, err)
 		var xerr *xpath3.XPathError
 		require.ErrorAs(t, err, &xerr)
-		require.Equal(t, "SENR0001", xerr.Code)
+		require.Equal(t, lexicon.ErrSENR0001, xerr.Code)
 	}
 	requireEquals := func(t *testing.T, expr, want string) {
 		t.Helper()

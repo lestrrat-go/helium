@@ -1,6 +1,9 @@
 package xpath3
 
-import "github.com/lestrrat-go/helium/internal/xsdregex"
+import (
+	"github.com/lestrrat-go/helium/internal/lexicon"
+	"github.com/lestrrat-go/helium/internal/xsdregex"
+)
 
 // The XPath/XML Schema regex translator lives in internal/xsdregex so that the
 // xsd package (which must not import xpath3) can share a single implementation.
@@ -11,7 +14,7 @@ func xsdRegexError(err error) error {
 	if err == nil {
 		return nil
 	}
-	return &XPathError{Code: errCodeFORX0002, Message: err.Error()}
+	return &XPathError{Code: lexicon.ErrFORX0002, Message: err.Error()}
 }
 
 func translateXPathRegex(pattern string, dotAll, ignoreCase bool) (string, error) {

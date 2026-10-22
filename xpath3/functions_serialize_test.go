@@ -5,6 +5,7 @@ import (
 	"testing"
 
 	"github.com/lestrrat-go/helium"
+	"github.com/lestrrat-go/helium/internal/lexicon"
 	"github.com/lestrrat-go/helium/xpath3"
 	"github.com/stretchr/testify/require"
 )
@@ -74,13 +75,13 @@ func TestSerialize_OptionsNodeUndeclarePrefixes(t *testing.T) {
 	err := run("yes", "1.0")
 	require.Error(t, err)
 	require.ErrorAs(t, err, &xpErr)
-	require.Equal(t, "SEPM0010", xpErr.Code)
+	require.Equal(t, lexicon.ErrSEPM0010, xpErr.Code)
 
 	// An invalid boolean value stays XPTY0004 (parse-time, before the version check).
 	err = run("maybe", "1.1")
 	require.Error(t, err)
 	require.ErrorAs(t, err, &xpErr)
-	require.Equal(t, "XPTY0004", xpErr.Code)
+	require.Equal(t, lexicon.ErrXPTY0004, xpErr.Code)
 }
 
 func mustCompile(t *testing.T, expr string) *xpath3.Expression {
@@ -271,7 +272,7 @@ func TestSerialize_AttributeNodeSENR0001(t *testing.T) {
 	require.Error(t, err)
 	var xpErr *xpath3.XPathError
 	require.ErrorAs(t, err, &xpErr)
-	require.Equal(t, "SENR0001", xpErr.Code)
+	require.Equal(t, lexicon.ErrSENR0001, xpErr.Code)
 }
 
 func TestSerialize_NamespaceNodeSENR0001(t *testing.T) {
@@ -281,7 +282,7 @@ func TestSerialize_NamespaceNodeSENR0001(t *testing.T) {
 	require.Error(t, err)
 	var xpErr *xpath3.XPathError
 	require.ErrorAs(t, err, &xpErr)
-	require.Equal(t, "SENR0001", xpErr.Code)
+	require.Equal(t, lexicon.ErrSENR0001, xpErr.Code)
 }
 
 // An explicit method="adaptive" still serializes an attribute as name="value".
@@ -304,7 +305,7 @@ func TestSerialize_StandaloneMapBadValueXPTY0004(t *testing.T) {
 	require.Error(t, err)
 	var xpErr *xpath3.XPathError
 	require.ErrorAs(t, err, &xpErr)
-	require.Equal(t, "XPTY0004", xpErr.Code)
+	require.Equal(t, lexicon.ErrXPTY0004, xpErr.Code)
 
 	// A typed xs:string is not an xs:boolean member of union(xs:boolean,"omit"),
 	// and "yes"/"no" are not xs:boolean lexicals — both stay XPTY0004 (matching
@@ -314,7 +315,7 @@ func TestSerialize_StandaloneMapBadValueXPTY0004(t *testing.T) {
 			`serialize(., map{"standalone": "`+bad+`"})`)
 		require.Error(t, err, bad)
 		require.ErrorAs(t, err, &xpErr)
-		require.Equal(t, "XPTY0004", xpErr.Code, bad)
+		require.Equal(t, lexicon.ErrXPTY0004, xpErr.Code, bad)
 	}
 }
 
@@ -377,7 +378,7 @@ func TestSerialize_OptionElementOnlyRaisesFOTY0012(t *testing.T) {
 		require.Error(t, err)
 		var xerr *xpath3.XPathError
 		require.True(t, errors.As(err, &xerr), "want *xpath3.XPathError, got %T: %v", err, err)
-		require.Equal(t, "FOTY0012", xerr.Code)
+		require.Equal(t, lexicon.ErrFOTY0012, xerr.Code)
 	}
 
 	t.Run("method element-only raises FOTY0012", func(t *testing.T) {
@@ -422,7 +423,7 @@ func TestOptionMapElementOnlyRaisesFOTY0012(t *testing.T) {
 		require.Error(t, err)
 		var xerr *xpath3.XPathError
 		require.True(t, errors.As(err, &xerr), "want *xpath3.XPathError, got %T: %v", err, err)
-		require.Equal(t, "FOTY0012", xerr.Code)
+		require.Equal(t, lexicon.ErrFOTY0012, xerr.Code)
 	}
 
 	t.Run("map:merge duplicates element-only", func(t *testing.T) {
@@ -453,7 +454,7 @@ func TestOptionMapFunctionValueRaisesFOTY0013(t *testing.T) {
 		require.Error(t, err)
 		var xerr *xpath3.XPathError
 		require.True(t, errors.As(err, &xerr), "want *xpath3.XPathError, got %T: %v", err, err)
-		require.Equal(t, "FOTY0013", xerr.Code)
+		require.Equal(t, lexicon.ErrFOTY0013, xerr.Code)
 	}
 
 	t.Run("map:merge duplicates function item", func(t *testing.T) {

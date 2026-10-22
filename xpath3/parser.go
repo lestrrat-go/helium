@@ -1210,7 +1210,7 @@ func (p *parser) parseNodeTest(_ AxisType) (NodeTest, error) {
 			uri := tok.Value[2:idx]
 			local := tok.Value[idx+1:]
 			if uri == lexicon.NamespaceXMLNS {
-				return nil, &XPathError{Code: errCodeXPST0081, Message: "the xmlns namespace URI cannot be used in name tests"}
+				return nil, &XPathError{Code: lexicon.ErrXPST0081, Message: "the xmlns namespace URI cannot be used in name tests"}
 			}
 			return NameTest{URI: uri, Local: local}, nil
 		}
@@ -1987,7 +1987,7 @@ func (p *parser) parseItemType() (NodeTest, error) {
 			// Per XPath 3.1 §3.1.5.4: when parameter types are present,
 			// "as SequenceType" is required.
 			return nil, &XPathError{
-				Code:    errCodeXPST0003,
+				Code:    lexicon.ErrXPST0003,
 				Message: "function type with parameter types requires 'as ReturnType'",
 			}
 		}

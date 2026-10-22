@@ -8,6 +8,7 @@ import (
 	"strings"
 
 	"github.com/lestrrat-go/helium"
+	"github.com/lestrrat-go/helium/internal/lexicon"
 	"github.com/lestrrat-go/helium/internal/sequence"
 	"github.com/lestrrat-go/helium/xpath3"
 )
@@ -43,7 +44,7 @@ func (ec *execContext) fnCopyOf(ctx context.Context, args []xpath3.Sequence) (xp
 		} else if ec.contextNode != nil {
 			nodes = append(nodes, ec.contextNode)
 		} else {
-			return nil, dynamicError(errCodeXPDY0002, "copy-of() with no arguments requires a context item")
+			return nil, dynamicError(lexicon.ErrXPDY0002, "copy-of() with no arguments requires a context item")
 		}
 	}
 	var result xpath3.ItemSlice
@@ -51,7 +52,7 @@ func (ec *execContext) fnCopyOf(ctx context.Context, args []xpath3.Sequence) (xp
 		// XTTE0950: copying a standalone attribute with namespace-sensitive
 		// content (xs:QName, xs:NOTATION) via copy-of() loses namespace bindings.
 		if node.Type() == helium.AttributeNode && ec.nodeHasNamespaceSensitiveContent(node) {
-			return nil, dynamicError(errCodeXTTE0950,
+			return nil, dynamicError(lexicon.ErrXTTE0950,
 				"copy-of(): cannot copy attribute with namespace-sensitive content")
 		}
 		copied, err := helium.CopyNode(node, ec.resultDoc)

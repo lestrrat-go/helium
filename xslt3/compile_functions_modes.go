@@ -52,7 +52,7 @@ func (c *compiler) compileGlobalContextItem(ctx context.Context, elem *helium.El
 	def.XPathDefaultNS = xpathDefaultNS
 	def.HasXPathDefaultNS = hasXPathDefaultNS
 	if def.Use == ctxItemAbsent && def.As != "" {
-		return staticError(errCodeXTSE3089, "xsl:global-context-item with use=\"absent\" must not specify @as")
+		return staticError(lexicon.ErrXTSE3089, "xsl:global-context-item with use=\"absent\" must not specify @as")
 	}
 	moduleKey := c.moduleKey
 	if moduleKey == "" {
@@ -63,7 +63,7 @@ func (c *compiler) compileGlobalContextItem(ctx context.Context, elem *helium.El
 	}
 	// XTSE3087: more than one declaration in the same stylesheet module.
 	if _, exists := c.stylesheet.globalContextModules[moduleKey]; exists {
-		return staticError(errCodeXTSE3087, "multiple xsl:global-context-item declarations in stylesheet module")
+		return staticError(lexicon.ErrXTSE3087, "multiple xsl:global-context-item declarations in stylesheet module")
 	}
 	c.stylesheet.globalContextModules[moduleKey] = def
 
@@ -80,7 +80,7 @@ func (c *compiler) compileGlobalContextItem(ctx context.Context, elem *helium.El
 		defKey := canonicalSequenceTypeKey(def.As,
 			nsResolverFromMap(def.Namespaces), def.XPathDefaultNS, def.HasXPathDefaultNS)
 		if existing.Use != def.Use || existingKey != defKey {
-			return staticError(errCodeXTSE3087, "conflicting xsl:global-context-item declarations")
+			return staticError(lexicon.ErrXTSE3087, "conflicting xsl:global-context-item declarations")
 		}
 		return nil
 	}
@@ -309,7 +309,7 @@ func (c *compiler) compileFunction(ctx context.Context, elem *helium.Element) er
 	}
 	name := getAttr(elem, xslAttrName)
 	if name == "" {
-		return staticError(errCodeXTSE0110, "xsl:function requires name attribute")
+		return staticError(lexicon.ErrXTSE0110, "xsl:function requires name attribute")
 	}
 
 	// Collect namespace declarations from this element
@@ -321,33 +321,33 @@ func (c *compiler) compileFunction(ctx context.Context, elem *helium.Element) er
 		// EQName: Q{uri}local
 		closeBrace := strings.IndexByte(name, '}')
 		if closeBrace < 0 {
-			return staticError(errCodeXTSE0010, "malformed EQName in xsl:function name %q", name)
+			return staticError(lexicon.ErrXTSE0010, "malformed EQName in xsl:function name %q", name)
 		}
 		uri := name[2:closeBrace]
 		local := name[closeBrace+1:]
 		if uri == "" {
-			return staticError(errCodeXTSE0010, "xsl:function name %q must be in a non-null namespace", name)
+			return staticError(lexicon.ErrXTSE0010, "xsl:function name %q must be in a non-null namespace", name)
 		}
 		qn = xpath3.QualifiedName{URI: uri, Name: local}
 	} else if prefix, local, ok := strings.Cut(name, ":"); ok {
 		if !xmlchar.IsValidNCName(prefix) || !xmlchar.IsValidNCName(local) {
-			return staticError(errCodeXTSE0020, "xsl:function name %q is not a valid QName", name)
+			return staticError(lexicon.ErrXTSE0020, "xsl:function name %q is not a valid QName", name)
 		}
 		uri := c.nsBindings[prefix]
 		if uri == "" {
 			uri = c.stylesheet.namespaces[prefix]
 		}
 		if uri == "" {
-			return staticError(errCodeXTSE0010, "unresolved namespace prefix %q in xsl:function name %q", prefix, name)
+			return staticError(lexicon.ErrXTSE0010, "unresolved namespace prefix %q in xsl:function name %q", prefix, name)
 		}
 		qn = xpath3.QualifiedName{URI: uri, Name: local}
 	} else {
-		return staticError(errCodeXTSE0010, "xsl:function name %q must have a namespace prefix", name)
+		return staticError(lexicon.ErrXTSE0010, "xsl:function name %q must have a namespace prefix", name)
 	}
 
 	// XTSE0080: function name must not be in a reserved namespace
 	if isReservedFunctionNS(qn.URI) {
-		return staticError(errCodeXTSE0080, "xsl:function name %q is in a reserved namespace", name)
+		return staticError(lexicon.ErrXTSE0080, "xsl:function name %q is in a reserved namespace", name)
 	}
 
 	// Handle expand-text on xsl:function (using GetAttribute to catch empty values)
@@ -356,7 +356,7 @@ func (c *compiler) compileFunction(ctx context.Context, elem *helium.Element) er
 		if v, ok := parseXSDBool(et); ok {
 			c.expandText = v
 		} else {
-			return staticError(errCodeXTSE0020, "%q is not a valid value for xsl:function/@expand-text", et)
+			return staticError(lexicon.ErrXTSE0020, "%q is not a valid value for xsl:function/@expand-text", et)
 		}
 	}
 
@@ -377,7 +377,7 @@ func (c *compiler) compileFunction(ctx context.Context, elem *helium.Element) er
 			ovBool, _ := parseXSDBool(ov)
 			oefBool, _ := parseXSDBool(oef)
 			if ovBool != oefBool {
-				return staticError(errCodeXTSE0020,
+				return staticError(lexicon.ErrXTSE0020,
 					"xsl:function has conflicting @override=%q and @override-extension-function=%q", ov, oef)
 			}
 		}
@@ -388,7 +388,7 @@ func (c *compiler) compileFunction(ctx context.Context, elem *helium.Element) er
 		case lexicon.ValueYes, lexicon.ValueNo, "maybe":
 			// valid
 		default:
-			return staticError(errCodeXTSE0020,
+			return staticError(lexicon.ErrXTSE0020,
 				"%q is not a valid value for xsl:function/@new-each-time", net)
 		}
 	}
@@ -411,29 +411,29 @@ func (c *compiler) compileFunction(ctx context.Context, elem *helium.Element) er
 			if reqVal, hasReq := childElem.GetAttribute("required"); hasReq {
 				if reqVal != lexicon.ValueYes && reqVal != "1" && reqVal != lexicon.ValueTrue {
 					pname := getAttr(childElem, "name")
-					return staticError(errCodeXTSE0020,
+					return staticError(lexicon.ErrXTSE0020,
 						"xsl:param %q in xsl:function must not have required=%q", pname, reqVal)
 				}
 			}
 			// XTSE0020: tunnel="yes" is not allowed on a function parameter
 			if getAttr(childElem, "tunnel") == lexicon.ValueYes {
-				return staticError(errCodeXTSE0020,
+				return staticError(lexicon.ErrXTSE0020,
 					"tunnel=\"yes\" is not allowed on a function parameter")
 			}
 			// XTSE0760: function params must not have a default value
 			if getAttr(childElem, "select") != "" {
-				return staticError(errCodeXTSE0760,
+				return staticError(lexicon.ErrXTSE0760,
 					"xsl:param %q in xsl:function must not have a select attribute", getAttr(childElem, "name"))
 			}
 			if childElem.FirstChild() != nil {
 				// Check for non-whitespace content (body content = default value)
 				for ch := range helium.Children(childElem) {
 					if ch.Type() == helium.ElementNode {
-						return staticError(errCodeXTSE0760,
+						return staticError(lexicon.ErrXTSE0760,
 							"xsl:param %q in xsl:function must not have content", getAttr(childElem, "name"))
 					}
 					if ch.Type() == helium.TextNode && strings.TrimSpace(string(ch.Content())) != "" {
-						return staticError(errCodeXTSE0760,
+						return staticError(lexicon.ErrXTSE0760,
 							"xsl:param %q in xsl:function must not have content", getAttr(childElem, "name"))
 					}
 				}
@@ -458,7 +458,7 @@ func (c *compiler) compileFunction(ctx context.Context, elem *helium.Element) er
 		}
 	}
 	if len(params) == 0 && streamability != "" && streamability != lexicon.StreamUnclassified {
-		return staticError(errCodeXTSE3155,
+		return staticError(lexicon.ErrXTSE3155,
 			"xsl:function %q with no parameters must not have streamability=%q (only unclassified allowed)", name, streamability)
 	}
 
@@ -485,7 +485,7 @@ func (c *compiler) compileFunction(ctx context.Context, elem *helium.Element) er
 	fk := funcKey{Name: qn, Arity: len(fn.Params)}
 	if existing, ok := c.stylesheet.functions[fk]; ok {
 		if existing.ImportPrec == fn.ImportPrec {
-			return staticError(errCodeXTSE0770,
+			return staticError(lexicon.ErrXTSE0770,
 				"duplicate xsl:function %s with arity %d", name, len(fn.Params))
 		}
 	}
@@ -494,7 +494,7 @@ func (c *compiler) compileFunction(ctx context.Context, elem *helium.Element) er
 	if len(fn.Params) == 1 {
 		for _, sch := range c.stylesheet.schemas {
 			if _, found := sch.LookupType(qn.Name, qn.URI); found {
-				return staticError(errCodeXTSE0770,
+				return staticError(lexicon.ErrXTSE0770,
 					"xsl:function %s conflicts with schema-defined constructor of the same name", name)
 			}
 		}
@@ -513,14 +513,14 @@ func (c *compiler) compileMode(ctx context.Context, elem *helium.Element) error 
 	}
 	// xsl:mode must be empty (no children)
 	if elem.FirstChild() != nil {
-		return staticError(errCodeXTSE0010, "xsl:mode must be empty")
+		return staticError(lexicon.ErrXTSE0010, "xsl:mode must be empty")
 	}
 
 	name := strings.TrimSpace(getAttr(elem, "name"))
 	if name == "" {
 		name = modeDefault
 	} else if name == modeUnnamed || name == modeAll || name == modeCurrent {
-		return staticError(errCodeXTSE0020, "invalid mode name %q on xsl:mode", name)
+		return staticError(lexicon.ErrXTSE0020, "invalid mode name %q on xsl:mode", name)
 	} else if name[0] != '#' {
 		// Resolve QName to Clark notation so mode declarations and mode
 		// references (on xsl:template/@mode, xsl:apply-templates/@mode)
@@ -534,7 +534,7 @@ func (c *compiler) compileMode(ctx context.Context, elem *helium.Element) error 
 	if streamableStr != "" {
 		v, ok := parseXSDBool(streamableStr)
 		if !ok {
-			return staticError(errCodeXTSE0020, "invalid value %q for streamable on xsl:mode", streamableStr)
+			return staticError(lexicon.ErrXTSE0020, "invalid value %q for streamable on xsl:mode", streamableStr)
 		}
 		streamable = v
 	}
@@ -546,7 +546,7 @@ func (c *compiler) compileMode(ctx context.Context, elem *helium.Element) error 
 		case onNoMatchTextOnlyCopy, onNoMatchShallowCopy, onNoMatchDeepCopy, onNoMatchShallowSkip, onNoMatchDeepSkip, onNoMatchFail:
 			// valid
 		default:
-			return staticError(errCodeXTSE0020, "invalid value %q for on-no-match on xsl:mode", onNoMatch)
+			return staticError(lexicon.ErrXTSE0020, "invalid value %q for on-no-match on xsl:mode", onNoMatch)
 		}
 	}
 	// Note: we keep onNoMatch as "" when not specified, so we can detect
@@ -555,12 +555,12 @@ func (c *compiler) compileMode(ctx context.Context, elem *helium.Element) error 
 	// Validate boolean attributes
 	if v := getAttr(elem, "warning-on-no-match"); v != "" {
 		if _, ok := parseXSDBool(v); !ok {
-			return staticError(errCodeXTSE0020, "invalid value %q for warning-on-no-match on xsl:mode", v)
+			return staticError(lexicon.ErrXTSE0020, "invalid value %q for warning-on-no-match on xsl:mode", v)
 		}
 	}
 	if v := getAttr(elem, "warning-on-multiple-match"); v != "" {
 		if _, ok := parseXSDBool(v); !ok {
-			return staticError(errCodeXTSE0020, "invalid value %q for warning-on-multiple-match on xsl:mode", v)
+			return staticError(lexicon.ErrXTSE0020, "invalid value %q for warning-on-multiple-match on xsl:mode", v)
 		}
 	}
 	if v := getAttr(elem, "typed"); v != "" {
@@ -571,7 +571,7 @@ func (c *compiler) compileMode(ctx context.Context, elem *helium.Element) error 
 			// valid non-boolean values
 		default:
 			if _, ok := parseXSDBool(v); !ok {
-				return staticError(errCodeXTSE0020, "invalid value %q for typed on xsl:mode", v)
+				return staticError(lexicon.ErrXTSE0020, "invalid value %q for typed on xsl:mode", v)
 			}
 		}
 	}
@@ -579,7 +579,7 @@ func (c *compiler) compileMode(ctx context.Context, elem *helium.Element) error 
 	visibility := strings.TrimSpace(getAttr(elem, "visibility"))
 	// XTSE0020: unnamed mode cannot have visibility="public" or "final"
 	if name == modeDefault && (visibility == visPublic || visibility == visFinal) {
-		return staticError(errCodeXTSE0020, "unnamed mode cannot have visibility %q", visibility)
+		return staticError(lexicon.ErrXTSE0020, "unnamed mode cannot have visibility %q", visibility)
 	}
 
 	onMultipleMatch := strings.TrimSpace(getAttr(elem, "on-multiple-match"))
@@ -588,7 +588,7 @@ func (c *compiler) compileMode(ctx context.Context, elem *helium.Element) error 
 		case onMultipleMatchUseLast, onNoMatchFail:
 			// valid
 		default:
-			return staticError(errCodeXTSE0020, "invalid value %q for on-multiple-match on xsl:mode", onMultipleMatch)
+			return staticError(lexicon.ErrXTSE0020, "invalid value %q for on-multiple-match on xsl:mode", onMultipleMatch)
 		}
 	}
 

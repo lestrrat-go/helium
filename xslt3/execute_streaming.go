@@ -41,12 +41,12 @@ func (ec *execContext) execSourceDocument(ctx context.Context, inst *sourceDocum
 	if !ok {
 		data, err := ec.retrieveDocumentBytes(ctx, resolvedURI)
 		if err != nil {
-			return dynamicErrorCause(errCodeFODC0002, err, "xsl:source-document cannot load %q: %v", uri, err)
+			return dynamicErrorCause(lexicon.ErrFODC0002, err, "xsl:source-document cannot load %q: %v", uri, err)
 		}
 
 		doc, err = parseExternalXML(ctx, ec.injectedParser(), data, resolvedURI, ec.allowExternalEntities(), ec.retrieveDocumentBytes, nil, ec.resourceLimit())
 		if err != nil {
-			return dynamicError(errCodeFODC0002, "xsl:source-document cannot parse %q: %v", uri, err)
+			return dynamicError(lexicon.ErrFODC0002, "xsl:source-document cannot parse %q: %v", uri, err)
 		}
 
 		// Apply xsl:strip-space to the loaded document so that whitespace-only
@@ -69,11 +69,11 @@ func (ec *execContext) execSourceDocument(ctx context.Context, inst *sourceDocum
 		vr, valErr := ec.schemaRegistry.ValidateDoc(ctx, doc)
 		if valErr != nil {
 			if inst.TypeName != "" {
-				return dynamicError(errCodeXTTE1540,
+				return dynamicError(lexicon.ErrXTTE1540,
 					"source-document: content does not match declared type %s: %v", inst.TypeName, valErr)
 			}
 			if inst.Validation == validationStrict {
-				return dynamicError(errCodeXTTE1510,
+				return dynamicError(lexicon.ErrXTTE1510,
 					"source-document: strict validation failed: %v", valErr)
 			}
 		}
@@ -104,7 +104,7 @@ func (ec *execContext) execSourceDocument(ctx context.Context, inst *sourceDocum
 	if fragment != "" {
 		elem := doc.GetElementByID(fragment)
 		if elem == nil {
-			return dynamicError(errCodeFODC0002, "xsl:source-document fragment %q not found in %q", fragment, uri)
+			return dynamicError(lexicon.ErrFODC0002, "xsl:source-document fragment %q not found in %q", fragment, uri)
 		}
 		startNode = elem
 	}
@@ -190,7 +190,7 @@ func (ec *execContext) execIterate(ctx context.Context, inst *iterateInst) error
 		// Apply type coercion if as= is declared.
 		if p.As != "" && val != nil && sequence.Len(val) > 0 {
 			st := parseSequenceType(p.As)
-			coerced, err := checkSequenceType(ctx, val, st, errCodeXTTE0570, "xsl:iterate parameter $"+p.Name, ec)
+			coerced, err := checkSequenceType(ctx, val, st, lexicon.ErrXTTE0570, "xsl:iterate parameter $"+p.Name, ec)
 			if err != nil {
 				return err
 			}
@@ -263,7 +263,7 @@ func (ec *execContext) execIterate(ctx context.Context, inst *iterateInst) error
 						// Apply type coercion if as= is declared.
 						if asType, ok := paramTypes[name]; ok && asType != "" && val != nil && sequence.Len(val) > 0 {
 							st := parseSequenceType(asType)
-							coerced, coerceErr := checkSequenceType(ctx, val, st, errCodeXTTE0570, "xsl:next-iteration parameter $"+name, ec)
+							coerced, coerceErr := checkSequenceType(ctx, val, st, lexicon.ErrXTTE0570, "xsl:next-iteration parameter $"+name, ec)
 							if coerceErr != nil {
 								return coerceErr
 							}
@@ -463,7 +463,7 @@ func compareSingleMergeKey(a, b mergeKeyValue) (int, error) {
 			return 1, nil
 		}
 		// Types are incomparable — raise XTTE2230.
-		return 0, dynamicError(errCodeXTTE2230, "merge keys are not comparable: %s vs %s", a.atom.TypeName, b.atom.TypeName)
+		return 0, dynamicError(lexicon.ErrXTTE2230, "merge keys are not comparable: %s vs %s", a.atom.TypeName, b.atom.TypeName)
 	}
 
 	// Fall back to string comparison.
@@ -697,7 +697,7 @@ func (ec *execContext) execMerge(ctx context.Context, inst *mergeInst) error {
 		for si := 1; si < len(perSourceDataTypes); si++ {
 			for k := range first {
 				if k < len(perSourceDataTypes[si]) && first[k] != perSourceDataTypes[si][k] {
-					return dynamicError(errCodeXTDE2210, "merge sources have inconsistent data-type for merge key %d: %q vs %q", k+1, first[k], perSourceDataTypes[si][k])
+					return dynamicError(lexicon.ErrXTDE2210, "merge sources have inconsistent data-type for merge key %d: %q vs %q", k+1, first[k], perSourceDataTypes[si][k])
 				}
 			}
 		}
@@ -715,13 +715,13 @@ func (ec *execContext) execMerge(ctx context.Context, inst *mergeInst) error {
 					break
 				}
 				if firstKeys[k].Collation != srcKeys[k].Collation {
-					return dynamicError(errCodeXTDE2210, "merge sources have inconsistent collation for merge key %d: %q vs %q", k+1, firstKeys[k].Collation, srcKeys[k].Collation)
+					return dynamicError(lexicon.ErrXTDE2210, "merge sources have inconsistent collation for merge key %d: %q vs %q", k+1, firstKeys[k].Collation, srcKeys[k].Collation)
 				}
 				if firstKeys[k].Lang != srcKeys[k].Lang {
-					return dynamicError(errCodeXTDE2210, "merge sources have inconsistent lang for merge key %d: %q vs %q", k+1, firstKeys[k].Lang, srcKeys[k].Lang)
+					return dynamicError(lexicon.ErrXTDE2210, "merge sources have inconsistent lang for merge key %d: %q vs %q", k+1, firstKeys[k].Lang, srcKeys[k].Lang)
 				}
 				if firstKeys[k].CaseOrder != srcKeys[k].CaseOrder {
-					return dynamicError(errCodeXTDE2210, "merge sources have inconsistent case-order for merge key %d: %q vs %q", k+1, firstKeys[k].CaseOrder, srcKeys[k].CaseOrder)
+					return dynamicError(lexicon.ErrXTDE2210, "merge sources have inconsistent case-order for merge key %d: %q vs %q", k+1, firstKeys[k].CaseOrder, srcKeys[k].CaseOrder)
 				}
 			}
 		}
@@ -810,7 +810,7 @@ func (ec *execContext) execMerge(ctx context.Context, inst *mergeInst) error {
 					return cmpErr
 				}
 				if cmp > 0 {
-					return dynamicError(errCodeXTDE2220, "merge input is not sorted according to the declared merge key")
+					return dynamicError(lexicon.ErrXTDE2220, "merge input is not sorted according to the declared merge key")
 				}
 			}
 		}
@@ -877,21 +877,21 @@ func (ec *execContext) execMerge(ctx context.Context, inst *mergeInst) error {
 		fn: func(_ context.Context, args []xpath3.Sequence) (xpath3.Sequence, error) {
 			// XTDE3480: current-merge-group() is not available outside merge-action.
 			if !ec.inMergeAction {
-				return nil, dynamicError(errCodeXTDE3480, "current-merge-group() is not available outside the body of xsl:merge-action")
+				return nil, dynamicError(lexicon.ErrXTDE3480, "current-merge-group() is not available outside the body of xsl:merge-action")
 			}
 			if len(args) > 0 && args[0] != nil && sequence.Len(args[0]) > 0 {
 				// current-merge-group('source-name')
 				av, err := xpath3.AtomizeItem(args[0].Get(0))
 				if err != nil {
-					return nil, dynamicError(errCodeXTDE3490, "current-merge-group(): cannot atomize argument: %v", err)
+					return nil, dynamicError(lexicon.ErrXTDE3490, "current-merge-group(): cannot atomize argument: %v", err)
 				}
 				name, err := xpath3.AtomicToString(av)
 				if err != nil {
-					return nil, dynamicError(errCodeXTDE3490, "current-merge-group(): cannot convert argument to string: %v", err)
+					return nil, dynamicError(lexicon.ErrXTDE3490, "current-merge-group(): cannot convert argument to string: %v", err)
 				}
 				// XTDE3490: the argument must match a merge-source name.
 				if _, ok := validSourceNames[name]; !ok {
-					return nil, dynamicError(errCodeXTDE3490, "current-merge-group(%q): no xsl:merge-source with this name", name)
+					return nil, dynamicError(lexicon.ErrXTDE3490, "current-merge-group(%q): no xsl:merge-source with this name", name)
 				}
 				if items, ok := currentMergeGroupByName[name]; ok {
 					return items, nil
@@ -906,7 +906,7 @@ func (ec *execContext) execMerge(ctx context.Context, inst *mergeInst) error {
 		fn: func(_ context.Context, _ []xpath3.Sequence) (xpath3.Sequence, error) {
 			// XTDE3510: current-merge-key() is not available outside merge-action.
 			if !ec.inMergeAction {
-				return nil, dynamicError(errCodeXTDE3510, "current-merge-key() is not available outside the body of xsl:merge-action")
+				return nil, dynamicError(lexicon.ErrXTDE3510, "current-merge-key() is not available outside the body of xsl:merge-action")
 			}
 			return currentMergeKeySeq, nil
 		},
@@ -1335,7 +1335,7 @@ func (ec *execContext) applyAccumulatorPhase(ctx context.Context, node helium.No
 
 			// XTDE3400: cyclic dependency among accumulators.
 			if def.CyclicDeps {
-				return dynamicError(errCodeXTDE3400,
+				return dynamicError(lexicon.ErrXTDE3400,
 					"accumulator %q has a cyclic dependency on itself or other accumulators", def.Name)
 			}
 
@@ -1397,7 +1397,7 @@ func (ec *execContext) checkAccumulatorType(ctx context.Context, def *accumulato
 	if def == nil || def.As == "" {
 		return seq, nil
 	}
-	return checkSequenceType(ctx, seq, parseSequenceType(def.As), "XPTY0004", "accumulator "+def.Name, ec)
+	return checkSequenceType(ctx, seq, parseSequenceType(def.As), lexicon.ErrXPTY0004, "accumulator "+def.Name, ec)
 }
 
 // applyMergeSourceValidation applies xsl:merge-source/@validation and @type to
@@ -1420,11 +1420,11 @@ func (ec *execContext) applyMergeSourceValidation(ctx context.Context, src *merg
 		vr, valErr := ec.schemaRegistry.ValidateDoc(ctx, doc)
 		if valErr != nil {
 			if src.TypeName != "" {
-				return dynamicError(errCodeXTTE1540,
+				return dynamicError(lexicon.ErrXTTE1540,
 					"xsl:merge-source: content does not match declared type %s: %v", src.TypeName, valErr)
 			}
 			if src.Validation == validationStrict {
-				return dynamicError(errCodeXTTE1510,
+				return dynamicError(lexicon.ErrXTTE1510,
 					"xsl:merge-source: strict validation failed: %v", valErr)
 			}
 		}
@@ -1461,12 +1461,12 @@ func (ec *execContext) loadMergeDocument(ctx context.Context, uri string, effect
 
 	data, readErr := ec.retrieveDocumentBytes(ctx, resolvedURI)
 	if readErr != nil {
-		return nil, dynamicErrorCause(errCodeFODC0002, readErr, "xsl:merge cannot load %q: %v", uri, readErr)
+		return nil, dynamicErrorCause(lexicon.ErrFODC0002, readErr, "xsl:merge cannot load %q: %v", uri, readErr)
 	}
 
 	doc, parseErr := parseExternalXML(ctx, ec.injectedParser(), data, resolvedURI, ec.allowExternalEntities(), ec.retrieveDocumentBytes, nil, ec.resourceLimit())
 	if parseErr != nil {
-		return nil, dynamicError(errCodeFODC0002, "xsl:merge cannot parse %q: %v", uri, parseErr)
+		return nil, dynamicError(lexicon.ErrFODC0002, "xsl:merge cannot parse %q: %v", uri, parseErr)
 	}
 
 	// Apply xsl:strip-space.
@@ -1619,7 +1619,7 @@ func (ec *execContext) evaluateMergeKeys(ctx context.Context, src *mergeSourceIt
 				seqLen = sequence.Len(seq)
 			}
 			if seqLen > 1 {
-				return nil, dynamicError(errCodeXTTE1020, "xsl:merge-key select expression must return a single atomic value, got %d items", seqLen)
+				return nil, dynamicError(lexicon.ErrXTTE1020, "xsl:merge-key select expression must return a single atomic value, got %d items", seqLen)
 			}
 			// Extract the key value, preserving the atomic type.
 			if seqLen == 1 {
@@ -1779,7 +1779,7 @@ func (ec *execContext) resolveMergeKeyCollationURI(ctx context.Context, mk *merg
 	}
 	cmpFn, err := xpath3.ResolveCollationCompareFunc(collURI)
 	if err != nil {
-		return nil, collURI, dynamicError(errCodeXTDE2220, "unsupported collation URI %q: %v", collURI, err)
+		return nil, collURI, dynamicError(lexicon.ErrXTDE2220, "unsupported collation URI %q: %v", collURI, err)
 	}
 	return cmpFn, collURI, nil
 }

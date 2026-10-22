@@ -35,10 +35,10 @@ func (c *compiler) compileValueOf(ctx context.Context, elem *helium.Element) (*v
 			switch child.Type() {
 			case helium.TextNode, helium.CDATASectionNode:
 				if strings.TrimSpace(string(child.Content())) != "" {
-					return nil, staticError(errCodeXTSE0350, "xsl:value-of with select attribute must not have content")
+					return nil, staticError(lexicon.ErrXTSE0350, "xsl:value-of with select attribute must not have content")
 				}
 			case helium.ElementNode:
-				return nil, staticError(errCodeXTSE0350, "xsl:value-of with select attribute must not have content")
+				return nil, staticError(lexicon.ErrXTSE0350, "xsl:value-of with select attribute must not have content")
 			}
 		}
 	} else {
@@ -72,7 +72,7 @@ func (c *compiler) compileText(_ context.Context, elem *helium.Element) (*textIn
 		case helium.TextNode, helium.CDATASectionNode:
 			sb.Write(child.Content())
 		case helium.ElementNode:
-			return nil, staticError(errCodeXTSE0010, "xsl:text must not contain child elements")
+			return nil, staticError(lexicon.ErrXTSE0010, "xsl:text must not contain child elements")
 		}
 	}
 
@@ -124,7 +124,7 @@ func (c *compiler) compileElement(ctx context.Context, elem *helium.Element) (*e
 
 	nameAttr := getAttr(elem, "name")
 	if nameAttr == "" {
-		return nil, staticError(errCodeXTSE0110, "xsl:element requires name attribute")
+		return nil, staticError(lexicon.ErrXTSE0110, "xsl:element requires name attribute")
 	}
 
 	nameAVT, err := c.compileAVT(nameAttr, c.nsBindings)
@@ -197,7 +197,7 @@ func (c *compiler) compileElement(ctx context.Context, elem *helium.Element) (*e
 func (c *compiler) compileAttribute(ctx context.Context, elem *helium.Element) (*attributeInst, error) {
 	nameAttr := getAttr(elem, "name")
 	if nameAttr == "" {
-		return nil, staticError(errCodeXTSE0110, "xsl:attribute requires name attribute")
+		return nil, staticError(lexicon.ErrXTSE0110, "xsl:attribute requires name attribute")
 	}
 
 	nameAVT, err := c.compileAVT(nameAttr, c.nsBindings)
@@ -219,7 +219,7 @@ func (c *compiler) compileAttribute(ctx context.Context, elem *helium.Element) (
 			return nil, err
 		}
 		if !c.stylesheet.schemaAware && valAttr == validationStrict {
-			return nil, staticError(errCodeXTSE0220, "validation attribute requires schema-aware processing")
+			return nil, staticError(lexicon.ErrXTSE0220, "validation attribute requires schema-aware processing")
 		}
 		inst.Validation = valAttr
 	}
@@ -244,7 +244,7 @@ func (c *compiler) compileAttribute(ctx context.Context, elem *helium.Element) (
 	if selectAttr != "" {
 		// XTSE0840: xsl:attribute with select must have empty content.
 		if hasNonEmptyContent(elem) {
-			return nil, staticError(errCodeXTSE0840, "xsl:attribute with select attribute must have empty content")
+			return nil, staticError(lexicon.ErrXTSE0840, "xsl:attribute with select attribute must have empty content")
 		}
 		expr, err := c.compileXPath(selectAttr, c.nsBindings)
 		if err != nil {
@@ -269,7 +269,7 @@ func (c *compiler) compileComment(ctx context.Context, elem *helium.Element) (*c
 	if selectAttr != "" {
 		// XTSE0940: select and non-empty content are mutually exclusive.
 		if err := c.validateEmptyElement(ctx, elem, "xsl:comment"); err != nil {
-			return nil, staticError(errCodeXTSE0940, "xsl:comment has both @select and content")
+			return nil, staticError(lexicon.ErrXTSE0940, "xsl:comment has both @select and content")
 		}
 		expr, err := c.compileXPath(selectAttr, c.nsBindings)
 		if err != nil {
@@ -290,7 +290,7 @@ func (c *compiler) compileComment(ctx context.Context, elem *helium.Element) (*c
 func (c *compiler) compilePI(ctx context.Context, elem *helium.Element) (*piInst, error) {
 	nameAttr := getAttr(elem, "name")
 	if nameAttr == "" {
-		return nil, staticError(errCodeXTSE0110, "xsl:processing-instruction requires name attribute")
+		return nil, staticError(lexicon.ErrXTSE0110, "xsl:processing-instruction requires name attribute")
 	}
 
 	nameAVT, err := c.compileAVT(nameAttr, c.nsBindings)
@@ -304,7 +304,7 @@ func (c *compiler) compilePI(ctx context.Context, elem *helium.Element) (*piInst
 	if selectAttr != "" {
 		// XTSE0940: select and non-empty content are mutually exclusive.
 		if err := c.validateEmptyElement(ctx, elem, "xsl:processing-instruction"); err != nil {
-			return nil, staticError(errCodeXTSE0940, "xsl:processing-instruction has both @select and content")
+			return nil, staticError(lexicon.ErrXTSE0940, "xsl:processing-instruction has both @select and content")
 		}
 		expr, err := c.compileXPath(selectAttr, c.nsBindings)
 		if err != nil {
@@ -407,11 +407,11 @@ func (c *compiler) compileCopyOf(_ context.Context, elem *helium.Element) (*copy
 	for child := range helium.Children(elem) {
 		switch child.Type() {
 		case helium.ElementNode:
-			return nil, staticError(errCodeXTSE0260,
+			return nil, staticError(lexicon.ErrXTSE0260,
 				"xsl:copy-of must be empty, but contains child element %s", child.Name())
 		case helium.TextNode, helium.CDATASectionNode:
 			if strings.TrimSpace(string(child.Content())) != "" {
-				return nil, staticError(errCodeXTSE0260,
+				return nil, staticError(lexicon.ErrXTSE0260,
 					"xsl:copy-of must be empty, but contains text content")
 			}
 		}
@@ -423,7 +423,7 @@ func (c *compiler) compileCopyOf(_ context.Context, elem *helium.Element) (*copy
 			continue
 		}
 		if attr.LocalName() == "match" || attr.LocalName() == lexicon.AttrCount || attr.LocalName() == "from" {
-			return nil, staticError(errCodeXTSE0090,
+			return nil, staticError(lexicon.ErrXTSE0090,
 				"attribute %q is not allowed on xsl:copy-of", attr.LocalName())
 		}
 	}
@@ -437,7 +437,7 @@ func (c *compiler) compileCopyOf(_ context.Context, elem *helium.Element) (*copy
 
 	selectAttr := getAttr(elem, "select")
 	if selectAttr == "" {
-		return nil, staticError(errCodeXTSE0110, "xsl:copy-of requires select attribute")
+		return nil, staticError(lexicon.ErrXTSE0110, "xsl:copy-of requires select attribute")
 	}
 
 	expr, err := c.compileXPath(selectAttr, c.nsBindings)
@@ -509,7 +509,7 @@ func (c *compiler) compileNumber(_ context.Context, elem *helium.Element) (*numb
 		_, hasLevel := elem.GetAttribute("level")
 		if getAttr(elem, "select") != "" || getAttr(elem, "count") != "" ||
 			getAttr(elem, "from") != "" || hasLevel {
-			return nil, staticError(errCodeXTSE0975, "xsl:number: when @value is present, @select, @level, @count, and @from must be absent")
+			return nil, staticError(lexicon.ErrXTSE0975, "xsl:number: when @value is present, @select, @level, @count, and @from must be absent")
 		}
 		expr, err := c.compileXPath(valueAttr, c.nsBindings)
 		if err != nil {
@@ -558,7 +558,7 @@ func (c *compiler) compileNumber(_ context.Context, elem *helium.Element) (*numb
 		// Validate static start-at: must be a space-separated list of integers
 		if !strings.Contains(sa, "{") {
 			if _, ok := parseStartAt(sa); !ok {
-				return nil, staticError(errCodeXTSE0020, "%q is not a valid value for xsl:number/@start-at", sa)
+				return nil, staticError(lexicon.ErrXTSE0020, "%q is not a valid value for xsl:number/@start-at", sa)
 			}
 		}
 		inst.StartAt = avt
@@ -608,7 +608,7 @@ func patternReadsVariables(p *pattern) bool {
 func (c *compiler) compileNamespace(ctx context.Context, elem *helium.Element) (*namespaceInst, error) {
 	nameAttr, hasName := elem.GetAttribute("name")
 	if !hasName {
-		return nil, staticError(errCodeXTSE0110, "xsl:namespace requires name attribute")
+		return nil, staticError(lexicon.ErrXTSE0110, "xsl:namespace requires name attribute")
 	}
 	// name="" is valid: it sets the default namespace
 
@@ -623,10 +623,10 @@ func (c *compiler) compileNamespace(ctx context.Context, elem *helium.Element) (
 	hasContent := c.hasEffectiveContent(ctx, elem)
 	// XTSE0910: select and content are mutually exclusive on xsl:namespace
 	if selectAttr != "" && hasContent {
-		return nil, staticError(errCodeXTSE0910, "xsl:namespace must not have both a select attribute and content")
+		return nil, staticError(lexicon.ErrXTSE0910, "xsl:namespace must not have both a select attribute and content")
 	}
 	if selectAttr == "" && !hasContent {
-		return nil, staticError(errCodeXTSE0910, "xsl:namespace must have either a select attribute or content")
+		return nil, staticError(lexicon.ErrXTSE0910, "xsl:namespace must have either a select attribute or content")
 	}
 	if selectAttr != "" {
 		expr, err := c.compileXPath(selectAttr, c.nsBindings)
@@ -674,7 +674,7 @@ func (c *compiler) compileSequence(ctx context.Context, elem *helium.Element) (i
 	if selectAttr != "" {
 		// XTSE3185: when @select is present, only xsl:fallback children are allowed.
 		if hasSignificantChildren(elem) {
-			return nil, staticError(errCodeXTSE3185, "xsl:sequence with @select must not have content other than xsl:fallback")
+			return nil, staticError(lexicon.ErrXTSE3185, "xsl:sequence with @select must not have content other than xsl:fallback")
 		}
 		expr, err := c.compileXPath(selectAttr, c.nsBindings)
 		if err != nil {
@@ -757,7 +757,7 @@ func (c *compiler) compileLiteralResultElement(ctx context.Context, elem *helium
 							newExcludes[uri] = struct{}{}
 						} else {
 							// XTSE0809: #default used but no default namespace in scope
-							return nil, staticError(errCodeXTSE0809,
+							return nil, staticError(lexicon.ErrXTSE0809,
 								"#default in exclude-result-prefixes but no default namespace is declared")
 						}
 						continue
@@ -765,7 +765,7 @@ func (c *compiler) compileLiteralResultElement(ctx context.Context, elem *helium
 					if uri, ok := c.nsBindings[prefix]; ok && uri != "" {
 						newExcludes[uri] = struct{}{}
 					} else {
-						return nil, staticError(errCodeXTSE0808,
+						return nil, staticError(lexicon.ErrXTSE0808,
 							"undeclared namespace prefix %q in exclude-result-prefixes", prefix)
 					}
 				}
@@ -776,7 +776,7 @@ func (c *compiler) compileLiteralResultElement(ctx context.Context, elem *helium
 				if uri, ok := c.nsBindings[prefix]; ok && uri != "" {
 					newExcludes[uri] = struct{}{}
 				} else {
-					return nil, staticError(errCodeXTSE1430,
+					return nil, staticError(lexicon.ErrXTSE1430,
 						"undeclared namespace prefix %q in extension-element-prefixes", prefix)
 				}
 			}
@@ -889,7 +889,7 @@ func (c *compiler) compileLiteralResultElement(ctx context.Context, elem *helium
 				if c.effectiveVersion > "3.0" {
 					continue
 				}
-				return nil, staticError(errCodeXTSE0805,
+				return nil, staticError(lexicon.ErrXTSE0805,
 					"attribute xsl:%s is not allowed on a literal result element", attr.LocalName())
 			}
 			continue
@@ -978,7 +978,7 @@ func (c *compiler) compileLiteralResultElement(ctx context.Context, elem *helium
 			return nil, err
 		}
 		if !c.stylesheet.schemaAware && valAttr == validationStrict {
-			return nil, staticError(errCodeXTSE0220, "xsl:validation requires schema-aware processing")
+			return nil, staticError(lexicon.ErrXTSE0220, "xsl:validation requires schema-aware processing")
 		}
 		lre.Validation = valAttr
 	}

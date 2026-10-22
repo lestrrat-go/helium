@@ -96,7 +96,7 @@ func (c *compiler) compileImport(ctx context.Context, elem *helium.Element) erro
 	}
 	href := getAttr(elem, "href")
 	if href == "" {
-		return staticError(errCodeXTSE0110, "xsl:import requires href attribute")
+		return staticError(lexicon.ErrXTSE0110, "xsl:import requires href attribute")
 	}
 	return c.loadExternalStylesheet(ctx, stylesheetBaseURI(elem, c.baseURI, c.moduleRoot), href, true)
 }
@@ -105,7 +105,7 @@ func (c *compiler) compileImport(ctx context.Context, elem *helium.Element) erro
 func (c *compiler) resolveIncludeURI(_ context.Context, elem *helium.Element) (string, string, error) {
 	href := getAttr(elem, "href")
 	if href == "" {
-		return "", "", staticError(errCodeXTSE0110, "xsl:include requires href attribute")
+		return "", "", staticError(lexicon.ErrXTSE0110, "xsl:include requires href attribute")
 	}
 	baseURI := stylesheetBaseURI(elem, c.baseURI, c.moduleRoot)
 
@@ -208,7 +208,7 @@ func (c *compiler) collectIncludeImports(ctx context.Context, elem *helium.Eleme
 	}
 
 	if _, ok := c.importStack[importKey]; ok {
-		return staticError(errCodeXTSE0210, "circular import/include: %s", importKey)
+		return staticError(lexicon.ErrXTSE0210, "circular import/include: %s", importKey)
 	}
 	c.importStack[importKey] = struct{}{}
 	defer delete(c.importStack, importKey)
@@ -280,7 +280,7 @@ func (c *compiler) collectIncludeImports(ctx context.Context, elem *helium.Eleme
 // bookkeeping. The resolved resource is closed before returning.
 func (c *compiler) loadModuleDoc(ctx context.Context, uri string) (*helium.Document, error) {
 	if c.resolver == nil {
-		return nil, staticError(errCodeXTSE0165, "cannot load %q: no URIResolver configured (filesystem access is opt-in; set Compiler.URIResolver)", uri)
+		return nil, staticError(lexicon.ErrXTSE0165, "cannot load %q: no URIResolver configured (filesystem access is opt-in; set Compiler.URIResolver)", uri)
 	}
 
 	rc, resolveErr := c.resolver.Resolve(uri)
@@ -330,13 +330,13 @@ func (c *compiler) loadAndCacheInclude(ctx context.Context, uri, importKey strin
 	if fragment != "" {
 		root = findElementByID(doc, fragment)
 		if root == nil {
-			return nil, staticError(errCodeXTSE0010, "no element with id=%q in %q", fragment, uri)
+			return nil, staticError(lexicon.ErrXTSE0010, "no element with id=%q in %q", fragment, uri)
 		}
 	} else {
 		root = doc.DocumentElement()
 	}
 	if root == nil {
-		return nil, staticError(errCodeXTSE0010, "included document %q is not a stylesheet", uri)
+		return nil, staticError(lexicon.ErrXTSE0010, "included document %q is not a stylesheet", uri)
 	}
 	if root.URI() != lexicon.NamespaceXSLT {
 		if _, ok := root.GetAttributeNS("version", lexicon.NamespaceXSLT); ok {
@@ -345,7 +345,7 @@ func (c *compiler) loadAndCacheInclude(ctx context.Context, uri, importKey strin
 			c.includeRoots[importKey] = nil
 			return nil, nil //nolint:nilnil
 		}
-		return nil, staticError(errCodeXTSE0010, "included document %q is not a stylesheet", uri)
+		return nil, staticError(lexicon.ErrXTSE0010, "included document %q is not a stylesheet", uri)
 	}
 
 	// Also cache the module document under its FOLDED effective base (the
@@ -467,7 +467,7 @@ func (c *compiler) compileIncludeTemplates(ctx context.Context, elem *helium.Ele
 	if includedITA := getAttr(root, "input-type-annotations"); includedITA != "" && includedITA != validationUnspecified {
 		mainITA := c.stylesheet.inputTypeAnnotations
 		if mainITA != "" && mainITA != validationUnspecified && mainITA != includedITA {
-			return staticError(errCodeXTSE0265,
+			return staticError(lexicon.ErrXTSE0265,
 				"conflicting input-type-annotations: main module has %q, included module has %q",
 				mainITA, includedITA)
 		}
@@ -779,7 +779,7 @@ func (c *compiler) loadExternalStylesheet(ctx context.Context, baseURI, href str
 		importKey = uri + "#" + fragment
 	}
 	if _, ok := c.importStack[importKey]; ok {
-		return staticError(errCodeXTSE0210, "circular import/include: %s", importKey)
+		return staticError(lexicon.ErrXTSE0210, "circular import/include: %s", importKey)
 	}
 	c.importStack[importKey] = struct{}{}
 	defer delete(c.importStack, importKey)
@@ -809,17 +809,17 @@ func (c *compiler) loadExternalStylesheet(ctx context.Context, baseURI, href str
 	if fragment != "" {
 		importedRoot = findElementByID(doc, fragment)
 		if importedRoot == nil {
-			return staticError(errCodeXTSE0010, "no element with id=%q in %q", fragment, uri)
+			return staticError(lexicon.ErrXTSE0010, "no element with id=%q in %q", fragment, uri)
 		}
 	} else {
 		importedRoot = doc.DocumentElement()
 	}
 	if importedRoot == nil {
-		return staticError(errCodeXTSE0010, "imported document %q is not a stylesheet", uri)
+		return staticError(lexicon.ErrXTSE0010, "imported document %q is not a stylesheet", uri)
 	}
 	// XTSE0165: a package must not import another package via xsl:import.
 	if isImport && importedRoot.URI() == lexicon.NamespaceXSLT && importedRoot.LocalName() == lexicon.XSLTElementPackage {
-		return staticError(errCodeXTSE0165,
+		return staticError(lexicon.ErrXTSE0165,
 			"cannot import xsl:package %q (use xsl:use-package instead)", uri)
 	}
 	// If the root is not in the XSLT namespace, check for simplified stylesheet
@@ -858,7 +858,7 @@ func (c *compiler) loadExternalStylesheet(ctx context.Context, baseURI, href str
 			}
 			return nil
 		}
-		return staticError(errCodeXTSE0010, "imported document %q is not a stylesheet", uri)
+		return staticError(lexicon.ErrXTSE0010, "imported document %q is not a stylesheet", uri)
 	}
 
 	// Fold the module root's xml:base chain into the effective static base URI so
@@ -940,7 +940,7 @@ func (c *compiler) loadExternalStylesheet(ctx context.Context, baseURI, href str
 	if importedITA := getAttr(importedRoot, "input-type-annotations"); importedITA != "" && importedITA != validationUnspecified {
 		mainITA := c.stylesheet.inputTypeAnnotations
 		if mainITA != "" && mainITA != validationUnspecified && mainITA != importedITA {
-			return staticError(errCodeXTSE0265,
+			return staticError(lexicon.ErrXTSE0265,
 				"conflicting input-type-annotations: main module has %q, imported module has %q",
 				mainITA, importedITA)
 		}
@@ -999,7 +999,7 @@ func compileSimplified(ctx context.Context, doc *helium.Document, root *helium.E
 
 	// XTSE0150: simplified stylesheet must have xsl:version attribute
 	if _, ok := root.GetAttributeNS("version", lexicon.NamespaceXSLT); !ok {
-		return nil, staticError(errCodeXTSE0150,
+		return nil, staticError(lexicon.ErrXTSE0150,
 			"simplified stylesheet (literal result element) must have an xsl:version attribute")
 	}
 	c := &compiler{

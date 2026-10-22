@@ -11,6 +11,7 @@ import (
 
 	"github.com/lestrrat-go/helium"
 	"github.com/lestrrat-go/helium/internal/heliumtest"
+	"github.com/lestrrat-go/helium/internal/lexicon"
 	"github.com/lestrrat-go/helium/xpath3"
 	"github.com/lestrrat-go/helium/xsd"
 	"github.com/lestrrat-go/helium/xslt3"
@@ -334,7 +335,7 @@ func TestResourceBudget(t *testing.T) {
 
 		_, err := ss.Transform(source).Serialize(t.Context())
 		require.Error(t, err, "doc() of a hostile URL must be denied without a resolver")
-		require.Contains(t, err.Error(), "FODC0002",
+		require.Contains(t, err.Error(), lexicon.ErrFODC0002,
 			"default-deny doc() must surface FODC0002, got %v", err)
 	})
 
@@ -413,7 +414,7 @@ func TestResourceBudget(t *testing.T) {
 
 		_, err := ss.Transform(source).Serialize(t.Context())
 		require.Error(t, err, "unbounded recursion must return an error, not run forever / crash")
-		require.Contains(t, err.Error(), "XTDE0820",
+		require.Contains(t, err.Error(), lexicon.ErrXTDE0820,
 			"unbounded recursion must surface the recursion-depth error XTDE0820, got %v", err)
 	})
 }
@@ -535,7 +536,7 @@ func TestResourceCapPropagation(t *testing.T) {
 
 		resolver := httpResolverFunc(func(uri string) (io.ReadCloser, error) {
 			if uri != u {
-				return nil, &xpath3.XPathError{Code: "FOUT1170", Message: "not found: " + uri}
+				return nil, &xpath3.XPathError{Code: lexicon.ErrFOUT1170, Message: "not found: " + uri}
 			}
 			return io.NopCloser(strings.NewReader(body)), nil
 		})

@@ -304,19 +304,19 @@ func evalContextItemExpr(ctx context.Context, ec *evalContext) (Sequence, error)
 		return ItemSlice{ec.contextItem}, nil
 	}
 	if ixpath.IsNilNode(ec.node) {
-		return nil, &XPathError{Code: errCodeXPDY0002, Message: errMsgContextItemAbsent}
+		return nil, &XPathError{Code: lexicon.ErrXPDY0002, Message: errMsgContextItemAbsent}
 	}
 	return ItemSlice{nodeItemFor(ctx, ec, ec.node)}, nil
 }
 
 func evalRootExpr(ctx context.Context, ec *evalContext) (Sequence, error) {
 	if ixpath.IsNilNode(ec.node) {
-		return nil, &XPathError{Code: errCodeXPDY0002, Message: errMsgContextItemAbsent}
+		return nil, &XPathError{Code: lexicon.ErrXPDY0002, Message: errMsgContextItemAbsent}
 	}
 	root := ixpath.DocumentRoot(ec.node)
 	// XPDY0050: the root of the context node's tree must be a document node.
 	if root.Type() != helium.DocumentNode && root.Type() != helium.HTMLDocumentNode {
-		return nil, &XPathError{Code: errCodeXPDY0050, Message: "root of the tree containing the context node is not a document node"}
+		return nil, &XPathError{Code: lexicon.ErrXPDY0050, Message: "root of the tree containing the context node is not a document node"}
 	}
 	return ItemSlice{nodeItemFor(ctx, ec, root)}, nil
 }

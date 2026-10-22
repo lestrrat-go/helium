@@ -64,7 +64,7 @@ func (p prefixValidationPlan) Validate(namespaces map[string]string, strict bool
 			// an error (XPST0081) in pure XPath mode.
 			if namespaces == nil || namespaces[""] == "" {
 				return &XPathError{
-					Code:    errCodeXPST0081,
+					Code:    lexicon.ErrXPST0081,
 					Message: fmt.Sprintf("unprefixed type name %q requires a default element namespace", req.name),
 				}
 			}
@@ -74,13 +74,13 @@ func (p prefixValidationPlan) Validate(namespaces map[string]string, strict bool
 			switch req.name {
 			case "NMTOKENS", "IDREFS", "ENTITIES":
 				return &XPathError{
-					Code:    "XPST0051",
+					Code:    lexicon.ErrXPST0051,
 					Message: fmt.Sprintf("xs:%s is a list type and cannot be used as an atomic type", req.name),
 				}
 			}
 			if _, ok := knownXSTypeNames[req.name]; !ok {
 				return &XPathError{
-					Code:    "XPST0051",
+					Code:    lexicon.ErrXPST0051,
 					Message: fmt.Sprintf("unknown type xs:%s", req.name),
 				}
 			}
@@ -446,7 +446,7 @@ func validatePrefix(prefix string, namespaces map[string]string, strict bool) er
 		return nil
 	}
 	return &XPathError{
-		Code:    errCodeXPST0081,
+		Code:    lexicon.ErrXPST0081,
 		Message: "undeclared namespace prefix: " + prefix,
 	}
 }

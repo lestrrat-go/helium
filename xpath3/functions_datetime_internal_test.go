@@ -7,6 +7,8 @@ import (
 	"time"
 
 	"github.com/stretchr/testify/require"
+
+	"github.com/lestrrat-go/helium/internal/lexicon"
 )
 
 // TestFnDateTimeDerivedArgType verifies fn:dateTime accepts xs:date / xs:time
@@ -36,7 +38,7 @@ func TestFnDateTimeDerivedArgType(t *testing.T) {
 			SingleAtomic(AtomicValue{TypeName: TypeTime, Value: tm}),
 		})
 		require.Error(t, err)
-		require.ErrorIs(t, err, &XPathError{Code: "XPTY0004"})
+		require.ErrorIs(t, err, &XPathError{Code: lexicon.ErrXPTY0004})
 	})
 
 	t.Run("plain xs:date and xs:time are accepted", func(t *testing.T) {
@@ -204,5 +206,5 @@ func TestValidateTimezoneOffsetUnderflow(t *testing.T) {
 
 	err = validateTimezoneOffset(d)
 	require.Error(t, err)
-	require.ErrorIs(t, err, &XPathError{Code: "FODT0003"})
+	require.ErrorIs(t, err, &XPathError{Code: lexicon.ErrFODT0003})
 }

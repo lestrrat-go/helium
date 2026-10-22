@@ -98,12 +98,12 @@ func checkExposeVisibility(name, newVis, declaredVis string) (string, string) {
 	}
 	// XTSE3025: cannot make a non-abstract component abstract
 	if newVis == visAbstract && effectiveVis != visAbstract {
-		return errCodeXTSE3025, fmt.Sprintf(
+		return lexicon.ErrXTSE3025, fmt.Sprintf(
 			"xsl:expose: cannot change visibility of %q from %s to abstract", name, effectiveVis)
 	}
 	// XTSE3010: cannot change an abstract component to non-abstract
 	if effectiveVis == visAbstract && newVis != visAbstract {
-		return errCodeXTSE3010, fmt.Sprintf(
+		return lexicon.ErrXTSE3010, fmt.Sprintf(
 			"xsl:expose: cannot change visibility of abstract component %q to %s", name, newVis)
 	}
 	// XTSE3010: cannot increase visibility beyond declared level.
@@ -111,7 +111,7 @@ func checkExposeVisibility(name, newVis, declaredVis string) (string, string) {
 	// final→public is NOT allowed (removing restriction is an increase).
 	if declaredVis != "" && newVis != declaredVis {
 		if isVisibilityIncrease(declaredVis, newVis) {
-			return errCodeXTSE3010, fmt.Sprintf(
+			return lexicon.ErrXTSE3010, fmt.Sprintf(
 				"xsl:expose: cannot change visibility of %q from %s to %s", name, declaredVis, newVis)
 		}
 	}
@@ -449,7 +449,7 @@ func (c *compiler) compileExpose(ctx context.Context, elem *helium.Element) erro
 	visibility := getAttr(elem, xslAttrVisibility)
 
 	if component == "" || names == "" || visibility == "" {
-		return staticError(errCodeXTSE0010, "xsl:expose requires component, names, and visibility attributes")
+		return staticError(lexicon.ErrXTSE0010, "xsl:expose requires component, names, and visibility attributes")
 	}
 
 	// Validate visibility value
@@ -457,7 +457,7 @@ func (c *compiler) compileExpose(ctx context.Context, elem *helium.Element) erro
 	case visPublic, visPrivate, visFinal, visAbstract, visHidden:
 		// ok
 	default:
-		return staticError(errCodeXTSE0020, "invalid visibility value %q on xsl:expose", visibility)
+		return staticError(lexicon.ErrXTSE0020, "invalid visibility value %q on xsl:expose", visibility)
 	}
 
 	// Validate component type
@@ -466,7 +466,7 @@ func (c *compiler) compileExpose(ctx context.Context, elem *helium.Element) erro
 		xslElemAttributeSet: {}, xslElemMode: {}, xslWildcard: {},
 	}
 	if _, ok := validComponents[component]; !ok {
-		return staticError(errCodeXTSE0020, "invalid component type %q on xsl:expose", component)
+		return staticError(lexicon.ErrXTSE0020, "invalid component type %q on xsl:expose", component)
 	}
 
 	// Collect namespace bindings from the element's context
@@ -484,7 +484,7 @@ func (c *compiler) compileExpose(ctx context.Context, elem *helium.Element) erro
 			// XTSE3020 (erratum E36): non-wildcard function names must include
 			// arity (e.g., "f#2"). A bare name without "#" is an error.
 			if !isWildcard(resolvedName) && !strings.Contains(resolvedName, "#") {
-				return staticError(errCodeXTSE3020,
+				return staticError(lexicon.ErrXTSE3020,
 					"xsl:expose: function name %q must include arity (e.g. %s#0)", name, name)
 			}
 			if err := c.applyExposeToFunctionsStrict(ctx, resolvedName, visibility); err != nil {
@@ -515,7 +515,7 @@ func (c *compiler) compileExpose(ctx context.Context, elem *helium.Element) erro
 				func() error { return c.applyExposeToModes(ctx, resolvedName, visibility, false) },
 			} {
 				if err := fn(); err != nil {
-					if xErr, ok := err.(*XSLTError); ok && xErr.Code == errCodeXTSE3025 {
+					if xErr, ok := err.(*XSLTError); ok && xErr.Code == lexicon.ErrXTSE3025 {
 						return err
 					}
 				}
@@ -559,7 +559,7 @@ func (c *compiler) applyExposeToTemplates(_ context.Context, pattern, visibility
 				// hard error, but XTSE3010 (visibility increase) silently
 				// skips the component instead of erroring.
 				code, msg := checkExposeVisibility(name, visibility, declared)
-				if code == errCodeXTSE3025 {
+				if code == lexicon.ErrXTSE3025 {
 					return staticError(code, "%s", msg)
 				}
 				if declared != "" && isVisibilityIncrease(declared, visibility) {
@@ -571,7 +571,7 @@ func (c *compiler) applyExposeToTemplates(_ context.Context, pattern, visibility
 		}
 	}
 	if !matched && !isWildcard(pattern) && !isWildcardComponent {
-		return staticError(errCodeXTSE3010, "xsl:expose: no template %q found in package", pattern)
+		return staticError(lexicon.ErrXTSE3010, "xsl:expose: no template %q found in package", pattern)
 	}
 	return nil
 }
@@ -632,7 +632,7 @@ func (c *compiler) applyExposeToFunctionsStrict(_ context.Context, pattern, visi
 		}
 	}
 	if !matched && !isWildcard(pattern) {
-		return staticError(errCodeXTSE3010, "xsl:expose: no function %q found in package", pattern)
+		return staticError(lexicon.ErrXTSE3010, "xsl:expose: no function %q found in package", pattern)
 	}
 	return nil
 }
@@ -653,7 +653,7 @@ func (c *compiler) applyExposeToVariables(_ context.Context, pattern, visibility
 				// hard error, but XTSE3010 (visibility increase) silently
 				// skips the component instead of erroring.
 				code, msg := checkExposeVisibility(name, visibility, declared)
-				if code == errCodeXTSE3025 {
+				if code == lexicon.ErrXTSE3025 {
 					return staticError(code, "%s", msg)
 				}
 				if declared != "" && isVisibilityIncrease(declared, visibility) {
@@ -677,7 +677,7 @@ func (c *compiler) applyExposeToVariables(_ context.Context, pattern, visibility
 				// hard error, but XTSE3010 (visibility increase) silently
 				// skips the component instead of erroring.
 				code, msg := checkExposeVisibility(name, visibility, declared)
-				if code == errCodeXTSE3025 {
+				if code == lexicon.ErrXTSE3025 {
 					return staticError(code, "%s", msg)
 				}
 				if declared != "" && isVisibilityIncrease(declared, visibility) {
@@ -711,7 +711,7 @@ func (c *compiler) applyExposeToVariablesStrict(_ context.Context, pattern, visi
 				// hard error, but XTSE3010 (visibility increase) silently
 				// skips the component instead of erroring.
 				code, msg := checkExposeVisibility(name, visibility, declared)
-				if code == errCodeXTSE3025 {
+				if code == lexicon.ErrXTSE3025 {
 					return staticError(code, "%s", msg)
 				}
 				if declared != "" && isVisibilityIncrease(declared, visibility) {
@@ -731,7 +731,7 @@ func (c *compiler) applyExposeToVariablesStrict(_ context.Context, pattern, visi
 				// you cannot change a param's visibility by masquerading
 				// it as a variable.
 				if !varMatched {
-					return staticError(errCodeXTSE3020,
+					return staticError(lexicon.ErrXTSE3020,
 						"xsl:expose: %q is a stylesheet parameter, not a variable", name)
 				}
 				code, msg := checkExposeVisibility(name, visibility, declared)
@@ -743,7 +743,7 @@ func (c *compiler) applyExposeToVariablesStrict(_ context.Context, pattern, visi
 				// hard error, but XTSE3010 (visibility increase) silently
 				// skips the component instead of erroring.
 				code, msg := checkExposeVisibility(name, visibility, declared)
-				if code == errCodeXTSE3025 {
+				if code == lexicon.ErrXTSE3025 {
 					return staticError(code, "%s", msg)
 				}
 				if declared != "" && isVisibilityIncrease(declared, visibility) {
@@ -755,7 +755,7 @@ func (c *compiler) applyExposeToVariablesStrict(_ context.Context, pattern, visi
 		}
 	}
 	if !varMatched && !paramMatched && !isWildcard(pattern) {
-		return staticError(errCodeXTSE3010, "xsl:expose: no variable or parameter %q found in package", pattern)
+		return staticError(lexicon.ErrXTSE3010, "xsl:expose: no variable or parameter %q found in package", pattern)
 	}
 	return nil
 }
@@ -776,7 +776,7 @@ func (c *compiler) applyExposeToAttrSets(_ context.Context, pattern, visibility 
 				// hard error, but XTSE3010 (visibility increase) silently
 				// skips the component instead of erroring.
 				code, msg := checkExposeVisibility(name, visibility, declared)
-				if code == errCodeXTSE3025 {
+				if code == lexicon.ErrXTSE3025 {
 					return staticError(code, "%s", msg)
 				}
 				if declared != "" && isVisibilityIncrease(declared, visibility) {
@@ -788,7 +788,7 @@ func (c *compiler) applyExposeToAttrSets(_ context.Context, pattern, visibility 
 		}
 	}
 	if strict && !matched && !isWildcard(pattern) {
-		return staticError(errCodeXTSE3010, "xsl:expose: no attribute-set %q found in package", pattern)
+		return staticError(lexicon.ErrXTSE3010, "xsl:expose: no attribute-set %q found in package", pattern)
 	}
 	return nil
 }
@@ -812,10 +812,10 @@ func (c *compiler) applyExposeToModes(_ context.Context, pattern, visibility str
 				// hard error, but XTSE3010 (visibility increase) silently
 				// skips the component instead of erroring.
 				code, msg := checkExposeVisibility(md.Name, visibility, declared)
-				if code == errCodeXTSE3025 {
+				if code == lexicon.ErrXTSE3025 {
 					return staticError(code, "%s", msg)
 				}
-				if code == errCodeXTSE3010 {
+				if code == lexicon.ErrXTSE3010 {
 					continue
 				}
 			}
@@ -854,7 +854,7 @@ func (c *compiler) applyExposeToModes(_ context.Context, pattern, visibility str
 		}
 	}
 	if strict && !matched && !isWildcard(pattern) {
-		return staticError(errCodeXTSE3010, "xsl:expose: no mode %q found in package", pattern)
+		return staticError(lexicon.ErrXTSE3010, "xsl:expose: no mode %q found in package", pattern)
 	}
 	return nil
 }

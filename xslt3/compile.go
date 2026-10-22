@@ -406,7 +406,7 @@ func parseDOEAttr(v string) (bool, error) {
 	case lexicon.ValueNo, lexicon.ValueFalse, "0":
 		return false, nil
 	default:
-		return false, staticError(errCodeSEPM0016,
+		return false, staticError(lexicon.ErrSEPM0016,
 			"%q is not a valid value for disable-output-escaping", v)
 	}
 }
@@ -658,14 +658,14 @@ func (c *compiler) validateEmptyElement(_ context.Context, elem *helium.Element,
 	for child := range helium.Children(elem) {
 		switch child.Type() {
 		case helium.ElementNode:
-			return staticError(errCodeXTSE0260, "%s must be empty, found child element", name)
+			return staticError(lexicon.ErrXTSE0260, "%s must be empty, found child element", name)
 		case helium.TextNode:
 			content := string(child.Content())
 			if !isXMLWhitespaceOnly(content) {
-				return staticError(errCodeXTSE0260, "%s must be empty, found text content", name)
+				return staticError(lexicon.ErrXTSE0260, "%s must be empty, found text content", name)
 			}
 			if xmlSpacePreserve && content != "" {
-				return staticError(errCodeXTSE0260, "%s must be empty, whitespace preserved by xml:space", name)
+				return staticError(lexicon.ErrXTSE0260, "%s must be empty, whitespace preserved by xml:space", name)
 			}
 		}
 	}
@@ -845,7 +845,7 @@ func (c *compiler) detectStaticParamCycles(_ context.Context, root *helium.Eleme
 		if color[d.name] == white {
 			dfs(d.name)
 			if hasCycle {
-				return staticError(errCodeXPST0008,
+				return staticError(lexicon.ErrXPST0008,
 					"circular reference among static parameters/variables")
 			}
 		}
@@ -883,14 +883,14 @@ func (c *compiler) checkStaticVarKindConflicts(_ context.Context, root *helium.E
 			name := getAttr(elem, "name")
 			if importedKind, ok := c.importedStaticVarKinds[name]; ok {
 				if importedKind != ln {
-					return staticError(errCodeXTSE3450,
+					return staticError(lexicon.ErrXTSE3450,
 						"static %s $%s conflicts with imported declaration as %s", ln, name, importedKind)
 				}
 				// Same kind: check for value conflict.
 				if importedVal, haveVal := c.importedStaticVarValues[name]; haveVal {
 					mainVal := c.mainStaticVarValues[name]
 					if !staticSequenceEqual(mainVal, importedVal) {
-						return staticError(errCodeXTSE3450,
+						return staticError(lexicon.ErrXTSE3450,
 							"static %s $%s has conflicting values between main module and imported module", ln, name)
 					}
 				}
@@ -978,7 +978,7 @@ func (c *compiler) checkQNamePrefix(_ context.Context, name, context string) err
 		prefix := name[:idx]
 		if _, ok := c.nsBindings[prefix]; !ok {
 			if _, ok := c.stylesheet.namespaces[prefix]; !ok {
-				return staticError(errCodeXTSE0280, "undeclared namespace prefix %q in %s name %q", prefix, context, name)
+				return staticError(lexicon.ErrXTSE0280, "undeclared namespace prefix %q in %s name %q", prefix, context, name)
 			}
 		}
 	}
@@ -1000,7 +1000,7 @@ func (c *compiler) resolveShadowAttributes(ctx context.Context, elem *helium.Ele
 		avtStr := attr.Value()
 		avt, err := c.compileAVT(avtStr, c.nsBindings)
 		if err != nil {
-			return staticError(errCodeXTSE0020,
+			return staticError(lexicon.ErrXTSE0020,
 				"invalid AVT in shadow attribute _%s: %v", realName, err)
 		}
 
@@ -1009,7 +1009,7 @@ func (c *compiler) resolveShadowAttributes(ctx context.Context, elem *helium.Ele
 		eval := c.useWhenEvaluator(ctx)
 		val, err := avt.evaluateStatic(ctx, eval, nil)
 		if err != nil {
-			return staticError(errCodeXTSE0020,
+			return staticError(lexicon.ErrXTSE0020,
 				"error evaluating shadow attribute _%s: %v", realName, err)
 		}
 
@@ -1031,13 +1031,13 @@ func (c *compiler) resolveSingleShadowAttribute(ctx context.Context, elem *heliu
 	}
 	avt, err := c.compileAVT(avtStr, c.nsBindings)
 	if err != nil {
-		return staticError(errCodeXTSE0020,
+		return staticError(lexicon.ErrXTSE0020,
 			"invalid AVT in shadow attribute _%s: %v", name, err)
 	}
 	eval := c.useWhenEvaluator(ctx)
 	val, err := avt.evaluateStatic(ctx, eval, nil)
 	if err != nil {
-		return staticError(errCodeXTSE0020,
+		return staticError(lexicon.ErrXTSE0020,
 			"error evaluating shadow attribute _%s: %v", name, err)
 	}
 	elem.RemoveAttribute(shadowName)
@@ -1170,7 +1170,7 @@ func (c *compiler) useWhenEvaluator(_ context.Context) xpath3.Evaluator {
 func (c *compiler) compileXPath(expr string, _ map[string]string) (*xpath3.Expression, error) {
 	compiled, err := xpath3.NewCompiler().Compile(expr)
 	if err != nil {
-		return nil, staticError(errCodeXTSE0165, "invalid XPath %q: %v", expr, err)
+		return nil, staticError(lexicon.ErrXTSE0165, "invalid XPath %q: %v", expr, err)
 	}
 	// XSLT backwards-compatible processing: an expression compiled under an
 	// effective version < 2.0 is evaluated in XPath 1.0 compatibility mode. Record
@@ -1189,7 +1189,7 @@ func compile(ctx context.Context, doc *helium.Document, cfg *compileConfig) (*St
 
 	root := doc.DocumentElement()
 	if root == nil {
-		return nil, staticError(errCodeXTSE0010, "empty stylesheet document")
+		return nil, staticError(lexicon.ErrXTSE0010, "empty stylesheet document")
 	}
 
 	// Check if this is an XSLT stylesheet
@@ -1200,7 +1200,7 @@ func compile(ctx context.Context, doc *helium.Document, cfg *compileConfig) (*St
 
 	localName := root.LocalName()
 	if localName != "stylesheet" && localName != "transform" && localName != "package" {
-		return nil, staticError(errCodeXTSE0010, "root element must be xsl:stylesheet, xsl:transform, or xsl:package, got %s", root.Name())
+		return nil, staticError(lexicon.ErrXTSE0010, "root element must be xsl:stylesheet, xsl:transform, or xsl:package, got %s", root.Name())
 	}
 
 	c := &compiler{
@@ -1236,7 +1236,7 @@ func compile(ctx context.Context, doc *helium.Document, cfg *compileConfig) (*St
 		// In forwards-compatible mode (version > 3.0), unknown attributes are silently ignored.
 		ver := getAttr(root, "version")
 		if getAttr(root, "package-version") != "" && !isForwardsCompatible(ver) {
-			return nil, staticError(errCodeXTSE0090,
+			return nil, staticError(lexicon.ErrXTSE0090,
 				"attribute package-version is not allowed on xsl:%s", localName)
 		}
 	}
@@ -1295,7 +1295,7 @@ func compile(ctx context.Context, doc *helium.Document, cfg *compileConfig) (*St
 			c.defaultCollation = uri
 			c.stylesheet.defaultCollation = uri
 		} else {
-			return nil, staticError(errCodeXTSE0125,
+			return nil, staticError(lexicon.ErrXTSE0125,
 				"no recognized collation URI in default-collation %q", dc)
 		}
 	}
@@ -1305,7 +1305,7 @@ func compile(ctx context.Context, doc *helium.Document, cfg *compileConfig) (*St
 		if v, ok := parseXSDBool(et); ok {
 			c.expandText = v
 		} else {
-			return nil, staticError(errCodeXTSE0020, "%q is not a valid value for xsl:stylesheet/@expand-text", et)
+			return nil, staticError(lexicon.ErrXTSE0020, "%q is not a valid value for xsl:stylesheet/@expand-text", et)
 		}
 	}
 
@@ -1344,12 +1344,12 @@ func compile(ctx context.Context, doc *helium.Document, cfg *compileConfig) (*St
 	c.stylesheet.version = getAttr(root, paramVersion)
 	if c.stylesheet.version == "" {
 		if _, hasShadow := root.GetAttribute("_version"); !hasShadow {
-			return nil, staticError(errCodeXTSE0010, "xsl:%s requires a version attribute", localName)
+			return nil, staticError(lexicon.ErrXTSE0010, "xsl:%s requires a version attribute", localName)
 		}
 		c.stylesheet.version = lexicon.XSLTVersion30 // placeholder until shadow resolution
 	} else if !isXSDecimal(c.stylesheet.version) {
 		// XTSE0110: version must be a valid xs:decimal value
-		return nil, staticError(errCodeXTSE0110,
+		return nil, staticError(lexicon.ErrXTSE0110,
 			"xsl:%s version attribute %q is not a valid xs:decimal", localName, c.stylesheet.version)
 	}
 	c.effectiveVersion = c.stylesheet.version
@@ -1381,7 +1381,7 @@ func compile(ctx context.Context, doc *helium.Document, cfg *compileConfig) (*St
 				// XTSE0808: prefix must be declared
 				if _, ok := c.stylesheet.namespaces[prefix]; !ok {
 					if _, ok := c.nsBindings[prefix]; !ok {
-						return nil, staticError(errCodeXTSE0808,
+						return nil, staticError(lexicon.ErrXTSE0808,
 							"undeclared namespace prefix %q in exclude-result-prefixes", prefix)
 					}
 				}
@@ -1395,7 +1395,7 @@ func compile(ctx context.Context, doc *helium.Document, cfg *compileConfig) (*St
 		for prefix := range strings.FieldsSeq(eep) {
 			uri := c.nsBindings[prefix]
 			if isReservedNamespace(uri) {
-				return nil, staticError(errCodeXTSE0800,
+				return nil, staticError(lexicon.ErrXTSE0800,
 					"reserved namespace %q (prefix %q) must not be used as an extension namespace", uri, prefix)
 			}
 			c.stylesheet.excludePrefixes[prefix] = struct{}{}
@@ -1443,7 +1443,7 @@ func compile(ctx context.Context, doc *helium.Document, cfg *compileConfig) (*St
 	for qn, conflictPrec := range c.stylesheet.decimalFmtConflicts {
 		actualPrec := c.stylesheet.decimalFmtPrec[qn]
 		if actualPrec == conflictPrec {
-			return nil, staticError(errCodeXTSE1290,
+			return nil, staticError(lexicon.ErrXTSE1290,
 				"conflicting xsl:decimal-format declarations")
 		}
 	}
@@ -1458,26 +1458,26 @@ func compile(ctx context.Context, doc *helium.Document, cfg *compileConfig) (*St
 	// XTSE0545: check deferred mode property conflicts after all imports
 	for name, md := range c.stylesheet.modeDefs {
 		if md.conflictOnNoMatch {
-			return nil, staticError(errCodeXTSE0545, "conflicting on-no-match values for mode %q", name)
+			return nil, staticError(lexicon.ErrXTSE0545, "conflicting on-no-match values for mode %q", name)
 		}
 		if md.conflictStreamable {
-			return nil, staticError(errCodeXTSE0545, "conflicting streamable values for mode %q", name)
+			return nil, staticError(lexicon.ErrXTSE0545, "conflicting streamable values for mode %q", name)
 		}
 		if md.conflictVisibility {
-			return nil, staticError(errCodeXTSE0545, "conflicting visibility values for mode %q", name)
+			return nil, staticError(lexicon.ErrXTSE0545, "conflicting visibility values for mode %q", name)
 		}
 		if md.conflictOnMultiple {
-			return nil, staticError(errCodeXTSE0545, "conflicting on-multiple-match values for mode %q", name)
+			return nil, staticError(lexicon.ErrXTSE0545, "conflicting on-multiple-match values for mode %q", name)
 		}
 		if md.conflictAccumulator {
-			return nil, staticError(errCodeXTSE0545, "conflicting use-accumulators values for mode %q", name)
+			return nil, staticError(lexicon.ErrXTSE0545, "conflicting use-accumulators values for mode %q", name)
 		}
 	}
 
 	// XTSE3350: check deferred accumulator duplicate conflicts
 	for name, acc := range c.stylesheet.accumulators {
 		if acc.conflictDuplicate {
-			return nil, staticError(errCodeXTSE3350,
+			return nil, staticError(lexicon.ErrXTSE3350,
 				"duplicate xsl:accumulator %q at the same import precedence", name)
 		}
 	}
@@ -1544,10 +1544,10 @@ func compile(ctx context.Context, doc *helium.Document, cfg *compileConfig) (*St
 	for _, ref := range c.usedAttrSetRefs {
 		asd, ok := c.stylesheet.attributeSets[ref]
 		if !ok {
-			return nil, staticError(errCodeXTSE0710, "use-attribute-sets references undeclared attribute-set %q", ref)
+			return nil, staticError(lexicon.ErrXTSE0710, "use-attribute-sets references undeclared attribute-set %q", ref)
 		}
 		if asd != nil && asd.OwnerPackage != nil && (asd.Visibility == visHidden || asd.Visibility == visPrivate) {
-			return nil, staticError(errCodeXTSE0710, "use-attribute-sets references undeclared attribute-set %q", ref)
+			return nil, staticError(lexicon.ErrXTSE0710, "use-attribute-sets references undeclared attribute-set %q", ref)
 		}
 	}
 
@@ -1644,14 +1644,14 @@ func (c *compiler) checkAbstractComponents(_ context.Context) error {
 	// Check named templates
 	for name, tmpl := range c.stylesheet.namedTemplates {
 		if tmpl.Visibility == visAbstract {
-			return staticError(errCodeXTSE3080,
+			return staticError(lexicon.ErrXTSE3080,
 				"abstract template %q has no implementation", name)
 		}
 	}
 	// Check functions
 	for fk, fn := range c.stylesheet.functions {
 		if fn.Visibility == visAbstract {
-			return staticError(errCodeXTSE3080,
+			return staticError(lexicon.ErrXTSE3080,
 				"abstract function %s#%d has no implementation",
 				fmt.Sprintf("{%s}%s", fk.Name.URI, fk.Name.Name), fk.Arity)
 		}
@@ -1689,10 +1689,10 @@ func checkDeclaredModes(ss *Stylesheet, usedModes map[string]struct{}) error {
 			if displayName == "" {
 				displayName = modeUnnamed
 			}
-			return staticError(errCodeXTSE3085, "mode %q is used but not declared (declared-modes is in effect)", displayName)
+			return staticError(lexicon.ErrXTSE3085, "mode %q is used but not declared (declared-modes is in effect)", displayName)
 		}
 		if _, ok := ss.modeDefs[mode]; !ok {
-			return staticError(errCodeXTSE3085, "mode %q is used but not declared (declared-modes is in effect)", mode)
+			return staticError(lexicon.ErrXTSE3085, "mode %q is used but not declared (declared-modes is in effect)", mode)
 		}
 	}
 	return nil
@@ -1705,7 +1705,7 @@ func checkCharacterMapRefs(ss *Stylesheet) error {
 	for _, cm := range ss.characterMaps {
 		for _, ref := range cm.UseCharacterMaps {
 			if _, ok := ss.characterMaps[ref]; !ok {
-				return staticError(errCodeXTSE1590,
+				return staticError(lexicon.ErrXTSE1590,
 					"character map %q references undefined character map %q", cm.Name, ref)
 			}
 		}
@@ -1714,7 +1714,7 @@ func checkCharacterMapRefs(ss *Stylesheet) error {
 	var detectCycle func(name string, visited map[string]struct{}) error
 	detectCycle = func(name string, visited map[string]struct{}) error {
 		if _, inPath := visited[name]; inPath {
-			return staticError(errCodeXTSE1600,
+			return staticError(lexicon.ErrXTSE1600,
 				"circular reference in character-map %q", name)
 		}
 		cm, ok := ss.characterMaps[name]
@@ -1740,7 +1740,7 @@ func checkCharacterMapRefs(ss *Stylesheet) error {
 	for _, outDef := range ss.outputs {
 		for _, ref := range outDef.UseCharacterMaps {
 			if _, ok := ss.characterMaps[ref]; !ok {
-				return staticError(errCodeXTSE1590,
+				return staticError(lexicon.ErrXTSE1590,
 					"xsl:output references undefined character map %q", ref)
 			}
 		}
@@ -1785,7 +1785,7 @@ func checkCallTemplateTunnelMismatch(ss *Stylesheet) error {
 						if tp, exists := targetParams[wp.Name]; exists {
 							// XTSE0680: a non-tunnel with-param matching a tunnel param is an error.
 							if tp.tunnel {
-								return staticError(errCodeXTSE0680,
+								return staticError(lexicon.ErrXTSE0680,
 									"xsl:call-template: non-tunnel parameter %q corresponds to tunnel parameter in target template",
 									wp.Name)
 							}
@@ -1794,7 +1794,7 @@ func checkCallTemplateTunnelMismatch(ss *Stylesheet) error {
 							// xsl:param in the target template is a static error — except
 							// under backwards-compatible processing, where the surplus
 							// parameter is silently ignored (§10.1.1).
-							return staticError(errCodeXTSE0680,
+							return staticError(lexicon.ErrXTSE0680,
 								"xsl:call-template: parameter %q not declared in target template %q",
 								wp.Name, ct.Name)
 						}
@@ -1803,7 +1803,7 @@ func checkCallTemplateTunnelMismatch(ss *Stylesheet) error {
 					for pName, pInfo := range targetParams {
 						if pInfo.required && !pInfo.tunnel {
 							if _, ok := supplied[pName]; !ok {
-								return staticError(errCodeXTSE0690,
+								return staticError(lexicon.ErrXTSE0690,
 									"xsl:call-template: required parameter %q not supplied for template %q",
 									pName, ct.Name)
 							}

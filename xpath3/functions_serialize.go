@@ -31,14 +31,6 @@ func init() {
 	registerFn("serialize", 1, 2, fnSerialize)
 }
 
-const (
-	errCodeSEPM0009 = "SEPM0009"
-	errCodeSEPM0010 = "SEPM0010"
-	errCodeSEPM0016 = "SEPM0016"
-	errCodeSESU0011 = "SESU0011"
-	errCodeSESU0013 = "SESU0013"
-)
-
 // effectiveSerializeVersion returns the effective output version, defaulting an
 // unspecified version to "1.0".
 func (o serializeOptions) effectiveSerializeVersion() string {
@@ -84,7 +76,7 @@ func fnSerialize(ctx context.Context, args []Sequence) (Sequence, error) {
 	// value (SEPM0016), with no silent fall-through to the xml method. The
 	// built-in methods and the unspecified default ("") dispatch below.
 	if opts.method != "" && !isBuiltinSerializeMethod(opts.method) {
-		return nil, &XPathError{Code: errCodeSEPM0016, Message: fmt.Sprintf("output method %q is not supported", opts.method)}
+		return nil, &XPathError{Code: lexicon.ErrSEPM0016, Message: fmt.Sprintf("output method %q is not supported", opts.method)}
 	}
 
 	// The version parameter, for the methods that emit an XML declaration, must
@@ -94,7 +86,7 @@ func fnSerialize(ctx context.Context, args []Sequence) (Sequence, error) {
 	// undeclaration rules, so it must be validated even when the declaration is
 	// omitted.
 	if opts.methodEmitsXMLDeclaration() && opts.xmlVersion != "" && !isSupportedXMLOutputVersion(opts.xmlVersion) {
-		return nil, &XPathError{Code: errCodeSESU0013, Message: fmt.Sprintf("XML output version %q is not supported", opts.xmlVersion)}
+		return nil, &XPathError{Code: lexicon.ErrSESU0013, Message: fmt.Sprintf("XML output version %q is not supported", opts.xmlVersion)}
 	}
 
 	// A doctype-system value MUST NOT contain BOTH an apostrophe (#x27) and a
@@ -105,7 +97,7 @@ func fnSerialize(ctx context.Context, args []Sequence) (Sequence, error) {
 	// adaptive ignore it — so the SystemLiteral check is gated to the methods that
 	// actually emit a DOCTYPE.
 	if opts.methodEmitsDoctype() && strings.ContainsRune(opts.doctypeSystem, '"') && strings.ContainsRune(opts.doctypeSystem, '\'') {
-		return nil, &XPathError{Code: errCodeSEPM0016, Message: "doctype-system must not contain both a quotation mark and an apostrophe"}
+		return nil, &XPathError{Code: lexicon.ErrSEPM0016, Message: "doctype-system must not contain both a quotation mark and an apostrophe"}
 	}
 
 	// SEPM0009 (Serialization 3.1): when the omit-xml-declaration parameter is
@@ -119,10 +111,10 @@ func fnSerialize(ctx context.Context, args []Sequence) (Sequence, error) {
 	// XML 1.0, so omit + doctype-system at version 1.0 is NOT an error.
 	if opts.methodEmitsXMLDeclaration() && opts.omitXMLDeclaration {
 		if opts.standalone == lexicon.ValueYes || opts.standalone == lexicon.ValueNo {
-			return nil, &XPathError{Code: errCodeSEPM0009, Message: "omit-xml-declaration=yes conflicts with standalone=yes/no"}
+			return nil, &XPathError{Code: lexicon.ErrSEPM0009, Message: "omit-xml-declaration=yes conflicts with standalone=yes/no"}
 		}
 		if opts.effectiveSerializeVersion() != "1.0" && opts.doctypeSystem != "" {
-			return nil, &XPathError{Code: errCodeSEPM0009, Message: "omit-xml-declaration=yes conflicts with a doctype-system value at version other than 1.0"}
+			return nil, &XPathError{Code: lexicon.ErrSEPM0009, Message: "omit-xml-declaration=yes conflicts with a doctype-system value at version other than 1.0"}
 		}
 	}
 
@@ -133,7 +125,7 @@ func fnSerialize(ctx context.Context, args []Sequence) (Sequence, error) {
 	// silently ignored, no error — so SEPM0010 is gated to that method family
 	// (methodEmitsXMLDeclaration covers exactly {"", xml, xhtml}).
 	if opts.methodEmitsXMLDeclaration() && opts.undeclarePrefixes && opts.effectiveSerializeVersion() != "1.1" {
-		return nil, &XPathError{Code: errCodeSEPM0010, Message: "undeclare-prefixes requires output version 1.1"}
+		return nil, &XPathError{Code: lexicon.ErrSEPM0010, Message: "undeclare-prefixes requires output version 1.1"}
 	}
 
 	// Validate the normalization-form up front so an unsupported form
@@ -144,7 +136,7 @@ func fnSerialize(ctx context.Context, args []Sequence) (Sequence, error) {
 	// text/attribute nodes), to the whole output for text/json (pure character
 	// data), or while adaptive serializes its string-like atomics.
 	if opts.methodAppliesNormalization() && serializeNormalizationActive(opts.normalizationForm) && !isSupportedSerializeNormForm(opts.normalizationForm) {
-		return nil, &XPathError{Code: errCodeSESU0011, Message: fmt.Sprintf("normalization-form %q is not supported", opts.normalizationForm)}
+		return nil, &XPathError{Code: lexicon.ErrSESU0011, Message: fmt.Sprintf("normalization-form %q is not supported", opts.normalizationForm)}
 	}
 
 	var result string
@@ -277,7 +269,7 @@ func applySerializeNormalization(s string, opts serializeOptions) (string, error
 	}
 	f, ok := serializeNormForm(form)
 	if !ok {
-		return "", &XPathError{Code: errCodeSESU0011, Message: fmt.Sprintf("normalization-form %q is not supported", form)}
+		return "", &XPathError{Code: lexicon.ErrSESU0011, Message: fmt.Sprintf("normalization-form %q is not supported", form)}
 	}
 	return f.String(s), nil
 }
@@ -1299,10 +1291,10 @@ func resolveSerializeStandaloneMap(ctx context.Context, v Sequence) (string, err
 // apply this guard for those methods.
 func serializeNodeKindError(item NodeItem) error {
 	if _, ok := item.Node.(*helium.Attribute); ok {
-		return &XPathError{Code: errCodeSENR0001, Message: "cannot serialize an attribute node under this output method"}
+		return &XPathError{Code: lexicon.ErrSENR0001, Message: "cannot serialize an attribute node under this output method"}
 	}
 	if item.Node != nil && item.Node.Type() == helium.NamespaceNode {
-		return &XPathError{Code: errCodeSENR0001, Message: "cannot serialize a namespace node under this output method"}
+		return &XPathError{Code: lexicon.ErrSENR0001, Message: "cannot serialize a namespace node under this output method"}
 	}
 	return nil
 }
@@ -1321,9 +1313,9 @@ func serializeItemKindError(item Item) error {
 	case NodeItem:
 		return serializeNodeKindError(v)
 	case MapItem:
-		return &XPathError{Code: errCodeSENR0001, Message: "cannot serialize a map under this output method"}
+		return &XPathError{Code: lexicon.ErrSENR0001, Message: "cannot serialize a map under this output method"}
 	case FunctionItem:
-		return &XPathError{Code: errCodeSENR0001, Message: "cannot serialize a function item under this output method"}
+		return &XPathError{Code: lexicon.ErrSENR0001, Message: "cannot serialize a function item under this output method"}
 	}
 	return nil
 }
@@ -1554,9 +1546,9 @@ func serializeAdaptiveItem(item Item, opts serializeOptions) (string, error) {
 	case FunctionItem:
 		// Only reachable under the explicit adaptive method (the default method is
 		// rejected above). helium emits no adaptive function representation.
-		return "", &XPathError{Code: errCodeFOER0000, Message: "cannot serialize function item"}
+		return "", &XPathError{Code: lexicon.ErrFOER0000, Message: "cannot serialize function item"}
 	default:
-		return "", &XPathError{Code: errCodeFOER0000, Message: fmt.Sprintf("cannot serialize %T", item)}
+		return "", &XPathError{Code: lexicon.ErrFOER0000, Message: fmt.Sprintf("cannot serialize %T", item)}
 	}
 }
 
@@ -1611,7 +1603,7 @@ func serializeAdaptiveArray(a ArrayItem, opts serializeOptions) (string, error) 
 
 func serializeJSONSequence(seq Sequence, opts serializeOptions) (string, error) {
 	if seqLen(seq) > 1 {
-		return "", &XPathError{Code: errCodeFOER0000, Message: "json serialization requires at most one top-level item"}
+		return "", &XPathError{Code: lexicon.ErrFOER0000, Message: "json serialization requires at most one top-level item"}
 	}
 	if seqLen(seq) == 0 {
 		return jsonKindNull, nil
@@ -1645,14 +1637,14 @@ func serializeJSONItem(item Item, opts serializeOptions) (string, error) {
 		err := v.forEach0(func(key AtomicValue, value Sequence) error {
 			keyText, err := atomicToString(key)
 			if err != nil {
-				return &XPathError{Code: errCodeFOER0000, Message: "json serialization map keys must be stringifiable"}
+				return &XPathError{Code: lexicon.ErrFOER0000, Message: "json serialization map keys must be stringifiable"}
 			}
 			if _, exists := seen[keyText]; exists && !opts.allowDuplicateNames {
-				return &XPathError{Code: errCodeFOER0000, Message: fmt.Sprintf("json serialization duplicate key %q", keyText)}
+				return &XPathError{Code: lexicon.ErrFOER0000, Message: fmt.Sprintf("json serialization duplicate key %q", keyText)}
 			}
 			seen[keyText] = struct{}{}
 			if seqLen(value) > 1 {
-				return &XPathError{Code: errCodeFOER0000, Message: "json serialization map values must be singleton or empty"}
+				return &XPathError{Code: lexicon.ErrFOER0000, Message: "json serialization map values must be singleton or empty"}
 			}
 			valText := jsonKindNull
 			if seqLen(value) == 1 {
@@ -1675,7 +1667,7 @@ func serializeJSONItem(item Item, opts serializeOptions) (string, error) {
 		// not implement, so it is an explicit unsupported-feature error
 		// (SEPM0016), and never a silent emission of xml. The empty/"xml" default is honored.
 		if m := opts.jsonNodeOutputMethod; m != "" && m != lexicon.PrefixXML {
-			return "", &XPathError{Code: errCodeSEPM0016, Message: fmt.Sprintf("json-node-output-method %q is not supported for a node embedded in JSON", m)}
+			return "", &XPathError{Code: lexicon.ErrSEPM0016, Message: fmt.Sprintf("json-node-output-method %q is not supported for a node embedded in JSON", m)}
 		}
 		text, err := serializeNodeItem(v, serializeOptions{method: lexicon.PrefixXML, omitXMLDeclaration: true})
 		if err != nil {
@@ -1683,9 +1675,9 @@ func serializeJSONItem(item Item, opts serializeOptions) (string, error) {
 		}
 		return `"` + encodeJSONStringForSerialization(text, opts) + `"`, nil
 	case FunctionItem:
-		return "", &XPathError{Code: errCodeFOER0000, Message: "cannot serialize function item as JSON"}
+		return "", &XPathError{Code: lexicon.ErrFOER0000, Message: "cannot serialize function item as JSON"}
 	default:
-		return "", &XPathError{Code: errCodeFOER0000, Message: fmt.Sprintf("cannot serialize %T as JSON", item)}
+		return "", &XPathError{Code: lexicon.ErrFOER0000, Message: fmt.Sprintf("cannot serialize %T as JSON", item)}
 	}
 }
 
@@ -1702,7 +1694,7 @@ func serializeJSONAtomic(v AtomicValue, opts serializeOptions) (string, error) {
 			return "", err
 		}
 		if s == "NaN" || s == "INF" || s == "-INF" {
-			return "", &XPathError{Code: errCodeFOER0000, Message: "cannot serialize NaN or infinity as JSON"}
+			return "", &XPathError{Code: lexicon.ErrFOER0000, Message: "cannot serialize NaN or infinity as JSON"}
 		}
 		return s, nil
 	default:
@@ -1762,7 +1754,7 @@ func serializeTextItem(item Item) (string, error) {
 	default:
 		// A map or array has no string value; it can only be serialized with the
 		// json or adaptive method.
-		return "", &XPathError{Code: errCodeFOER0000, Message: fmt.Sprintf("cannot serialize %T using the text output method", item)}
+		return "", &XPathError{Code: lexicon.ErrFOER0000, Message: fmt.Sprintf("cannot serialize %T using the text output method", item)}
 	}
 }
 

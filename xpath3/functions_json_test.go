@@ -6,6 +6,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/lestrrat-go/helium/internal/lexicon"
 	"github.com/lestrrat-go/helium/xpath3"
 	"github.com/stretchr/testify/require"
 )
@@ -46,7 +47,7 @@ func TestJSONToXML_ValidateRetainDuplicates_FOJS0005(t *testing.T) {
 	require.Error(t, err)
 	var xerr *xpath3.XPathError
 	require.True(t, errors.As(err, &xerr), "want *xpath3.XPathError, got %T: %v", err, err)
-	require.Equal(t, "FOJS0005", xerr.Code)
+	require.Equal(t, lexicon.ErrFOJS0005, xerr.Code)
 }
 
 // escapeForXPathString doubles embedded double-quotes for an XPath "..." literal.

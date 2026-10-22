@@ -15,7 +15,7 @@ import (
 func (c *compiler) compileSourceDocument(ctx context.Context, elem *helium.Element) (instruction, error) {
 	hrefAttr := getAttr(elem, "href")
 	if hrefAttr == "" {
-		return nil, staticError(errCodeXTSE0110, "xsl:source-document requires href attribute")
+		return nil, staticError(lexicon.ErrXTSE0110, "xsl:source-document requires href attribute")
 	}
 
 	hrefAVT, err := c.compileAVT(hrefAttr, c.nsBindings)
@@ -51,7 +51,7 @@ func (c *compiler) compileSourceDocument(ctx context.Context, elem *helium.Eleme
 func (c *compiler) compileIterate(ctx context.Context, elem *helium.Element) (instruction, error) {
 	selectAttr := getAttr(elem, "select")
 	if selectAttr == "" {
-		return nil, staticError(errCodeXTSE0110, "xsl:iterate requires select attribute")
+		return nil, staticError(lexicon.ErrXTSE0110, "xsl:iterate requires select attribute")
 	}
 
 	expr, err := c.compileXPath(selectAttr, c.nsBindings)
@@ -106,7 +106,7 @@ func (c *compiler) compileIterate(ctx context.Context, elem *helium.Element) (in
 			case lexicon.XSLTElementParam:
 				if !inParams {
 					// XTSE0010: xsl:param must come before other content
-					return nil, staticError(errCodeXTSE0010, "xsl:param in xsl:iterate must precede all other children")
+					return nil, staticError(lexicon.ErrXTSE0010, "xsl:param in xsl:iterate must precede all other children")
 				}
 				p, err := c.compileIterateParam(ctx, childElem)
 				if err != nil {
@@ -114,7 +114,7 @@ func (c *compiler) compileIterate(ctx context.Context, elem *helium.Element) (in
 				}
 				// Check for duplicate param names (XTSE0580).
 				if _, dup := paramNames[p.Name]; dup {
-					return nil, staticError(errCodeXTSE0580, "duplicate parameter name %q in xsl:iterate", p.Name)
+					return nil, staticError(lexicon.ErrXTSE0580, "duplicate parameter name %q in xsl:iterate", p.Name)
 				}
 				paramNames[p.Name] = struct{}{}
 				inst.Params = append(inst.Params, p)
@@ -122,7 +122,7 @@ func (c *compiler) compileIterate(ctx context.Context, elem *helium.Element) (in
 			case lexicon.XSLTElementOnCompletion:
 				inParams = false
 				if seenOnCompletion {
-					return nil, staticError(errCodeXTSE0010, "xsl:iterate must have at most one xsl:on-completion child")
+					return nil, staticError(lexicon.ErrXTSE0010, "xsl:iterate must have at most one xsl:on-completion child")
 				}
 				seenOnCompletion = true
 				// XTSE3125: on-completion must not have both select and body.
@@ -145,7 +145,7 @@ func (c *compiler) compileIterate(ctx context.Context, elem *helium.Element) (in
 					}
 				}
 				if selAttr != "" && hasBody {
-					return nil, staticError(errCodeXTSE3125, "xsl:on-completion must not have both select attribute and sequence constructor")
+					return nil, staticError(lexicon.ErrXTSE3125, "xsl:on-completion must not have both select attribute and sequence constructor")
 				}
 				if selAttr != "" {
 					restoreVersion := c.pushElementVersion(childElem)
@@ -220,7 +220,7 @@ func (c *compiler) compileIterate(ctx context.Context, elem *helium.Element) (in
 			// optional (doesn't end with ? or *), it requires a value.
 			as := p.As
 			if !strings.HasSuffix(as, "?") && !strings.HasSuffix(as, "*") {
-				return nil, staticError(errCodeXTSE3520, "xsl:iterate parameter %q with type %q requires a select attribute or default value", p.Name, as)
+				return nil, staticError(lexicon.ErrXTSE3520, "xsl:iterate parameter %q with type %q requires a select attribute or default value", p.Name, as)
 			}
 		}
 	}
@@ -235,7 +235,7 @@ func validateNextIterationParams(body []instruction, paramNames map[string]struc
 		if ni, ok := inst.(*nextIterationInst); ok {
 			for _, wp := range ni.Params {
 				if _, exists := paramNames[wp.Name]; !exists {
-					return staticError(errCodeXTSE3130, "xsl:next-iteration references undeclared parameter %q", wp.Name)
+					return staticError(lexicon.ErrXTSE3130, "xsl:next-iteration references undeclared parameter %q", wp.Name)
 				}
 			}
 		}
@@ -299,7 +299,7 @@ func (c *compiler) compileIterateParam(ctx context.Context, elem *helium.Element
 	defer c.pushElementVersion(elem)()
 	name := getAttr(elem, "name")
 	if name == "" {
-		return nil, staticError(errCodeXTSE0110, "xsl:param requires name attribute")
+		return nil, staticError(lexicon.ErrXTSE0110, "xsl:param requires name attribute")
 	}
 
 	p := &iterateParam{
@@ -380,12 +380,12 @@ func (c *compiler) compileForkBranch(ctx context.Context, elem *helium.Element) 
 func (c *compiler) compileBreak(ctx context.Context, elem *helium.Element) (instruction, error) {
 	// XTSE0010: xsl:break must be lexically within xsl:iterate.
 	if c.iterateDepth == 0 {
-		return nil, staticError(errCodeXTSE0010, "xsl:break must be within xsl:iterate")
+		return nil, staticError(lexicon.ErrXTSE0010, "xsl:break must be within xsl:iterate")
 	}
 	// XTSE3120: xsl:break must not be inside an element constructor,
 	// xsl:for-each, or other non-iterate-body position.
 	if !c.breakAllowed {
-		return nil, staticError(errCodeXTSE3120, "xsl:break is not allowed in this position within xsl:iterate")
+		return nil, staticError(lexicon.ErrXTSE3120, "xsl:break is not allowed in this position within xsl:iterate")
 	}
 
 	// XTSE3125: xsl:break must not have both select and body.
@@ -408,7 +408,7 @@ func (c *compiler) compileBreak(ctx context.Context, elem *helium.Element) (inst
 		}
 	}
 	if selectAttr != "" && hasBody {
-		return nil, staticError(errCodeXTSE3125, "xsl:break must not have both select attribute and sequence constructor")
+		return nil, staticError(lexicon.ErrXTSE3125, "xsl:break must not have both select attribute and sequence constructor")
 	}
 
 	inst := &breakInst{}
@@ -434,12 +434,12 @@ func (c *compiler) compileBreak(ctx context.Context, elem *helium.Element) (inst
 func (c *compiler) compileNextIteration(ctx context.Context, elem *helium.Element) (instruction, error) {
 	// XTSE0010: xsl:next-iteration must be lexically within xsl:iterate.
 	if c.iterateDepth == 0 {
-		return nil, staticError(errCodeXTSE0010, "xsl:next-iteration must be within xsl:iterate")
+		return nil, staticError(lexicon.ErrXTSE0010, "xsl:next-iteration must be within xsl:iterate")
 	}
 	// XTSE3120: xsl:next-iteration must not be inside an element constructor,
 	// xsl:for-each, or other non-iterate-body position.
 	if !c.breakAllowed {
-		return nil, staticError(errCodeXTSE3120, "xsl:next-iteration is not allowed in this position within xsl:iterate")
+		return nil, staticError(lexicon.ErrXTSE3120, "xsl:next-iteration is not allowed in this position within xsl:iterate")
 	}
 
 	inst := &nextIterationInst{}
@@ -472,7 +472,7 @@ func (c *compiler) compileAccumulator(ctx context.Context, elem *helium.Element)
 	defer c.pushElementVersion(elem)()
 	name := getAttr(elem, "name")
 	if name == "" {
-		return staticError(errCodeXTSE0110, "xsl:accumulator requires name attribute")
+		return staticError(lexicon.ErrXTSE0110, "xsl:accumulator requires name attribute")
 	}
 
 	expandedName := resolveQName(name, c.nsBindings)
@@ -487,7 +487,7 @@ func (c *compiler) compileAccumulator(ctx context.Context, elem *helium.Element)
 	// Read initial-value attribute (required per XSLT 3.0 §10.4)
 	iv := getAttr(elem, "initial-value")
 	if iv == "" {
-		return staticError(errCodeXTSE0010, "xsl:accumulator %q requires initial-value attribute", expandedName)
+		return staticError(lexicon.ErrXTSE0010, "xsl:accumulator %q requires initial-value attribute", expandedName)
 	}
 	initialExpr, err := c.compileXPath(iv, c.nsBindings)
 	if err != nil {
@@ -513,7 +513,7 @@ func (c *compiler) compileAccumulator(ctx context.Context, elem *helium.Element)
 
 	// XTSE0010: an accumulator must have at least one rule
 	if len(acc.Rules) == 0 {
-		return staticError(errCodeXTSE0010, "xsl:accumulator %q must have at least one xsl:accumulator-rule", expandedName)
+		return staticError(lexicon.ErrXTSE0010, "xsl:accumulator %q must have at least one xsl:accumulator-rule", expandedName)
 	}
 
 	if existing, exists := c.stylesheet.accumulators[expandedName]; exists {
@@ -549,13 +549,13 @@ func (c *compiler) compileAccumulatorRule(ctx context.Context, parent *accumulat
 	defer c.pushElementVersion(elem)()
 	matchAttr := getAttr(elem, "match")
 	if matchAttr == "" {
-		return staticError(errCodeXTSE0110, "xsl:accumulator-rule requires match attribute")
+		return staticError(lexicon.ErrXTSE0110, "xsl:accumulator-rule requires match attribute")
 	}
 
 	// XPST0008: $value is only in scope in the select expression/body of
 	// an accumulator-rule, not in the match pattern. Reject it early.
 	if containsVarRef(matchAttr, "value") {
-		return staticError(errCodeXPST0008, "variable $value is not in scope in accumulator-rule match pattern")
+		return staticError(lexicon.ErrXPST0008, "variable $value is not in scope in accumulator-rule match pattern")
 	}
 
 	matchPat, err := c.compilePattern(matchAttr, elem, c.xpathDefaultNS, c.hasXPathDefaultNS)
@@ -768,7 +768,7 @@ func (c *compiler) compileMerge(ctx context.Context, elem *helium.Element) (inst
 		case lexicon.XSLTElementMergeAction:
 			actionCount++
 			if actionCount > 1 {
-				return nil, staticError(errCodeXTSE0010, "xsl:merge must have at most one xsl:merge-action child")
+				return nil, staticError(lexicon.ErrXTSE0010, "xsl:merge must have at most one xsl:merge-action child")
 			}
 			body, err := c.compileChildren(ctx, childElem)
 			if err != nil {
@@ -778,19 +778,19 @@ func (c *compiler) compileMerge(ctx context.Context, elem *helium.Element) (inst
 		case lexicon.XSLTElementFallback:
 			// xsl:fallback is allowed only after xsl:merge-action (XTSE0010).
 			if actionCount == 0 {
-				return nil, staticError(errCodeXTSE0010, "xsl:fallback in xsl:merge must follow xsl:merge-action")
+				return nil, staticError(lexicon.ErrXTSE0010, "xsl:fallback in xsl:merge must follow xsl:merge-action")
 			}
 			continue
 		default:
-			return nil, staticError(errCodeXTSE0010, "unexpected child element xsl:%s in xsl:merge", childElem.LocalName())
+			return nil, staticError(lexicon.ErrXTSE0010, "unexpected child element xsl:%s in xsl:merge", childElem.LocalName())
 		}
 	}
 
 	if len(inst.Sources) == 0 {
-		return nil, staticError(errCodeXTSE0110, "xsl:merge requires at least one xsl:merge-source child")
+		return nil, staticError(lexicon.ErrXTSE0110, "xsl:merge requires at least one xsl:merge-source child")
 	}
 	if len(inst.Action) == 0 {
-		return nil, staticError(errCodeXTSE0110, "xsl:merge requires an xsl:merge-action child")
+		return nil, staticError(lexicon.ErrXTSE0110, "xsl:merge requires an xsl:merge-action child")
 	}
 
 	// XTSE2200: all merge-sources must have the same number of merge-keys.
@@ -798,7 +798,7 @@ func (c *compiler) compileMerge(ctx context.Context, elem *helium.Element) (inst
 		keyCount := len(inst.Sources[0].Keys)
 		for i := 1; i < len(inst.Sources); i++ {
 			if len(inst.Sources[i].Keys) != keyCount {
-				return nil, staticError(errCodeXTSE2200, "all xsl:merge-source children must have the same number of xsl:merge-key children")
+				return nil, staticError(lexicon.ErrXTSE2200, "all xsl:merge-source children must have the same number of xsl:merge-key children")
 			}
 		}
 	}
@@ -806,7 +806,7 @@ func (c *compiler) compileMerge(ctx context.Context, elem *helium.Element) (inst
 	// XTSE0020: merge-source name must be a valid xs:QName.
 	for _, src := range inst.Sources {
 		if src.Name != "" && !xmlchar.IsValidQName(src.Name) {
-			return nil, staticError(errCodeXTSE0020, "xsl:merge-source @name %q is not a valid xs:QName", src.Name)
+			return nil, staticError(lexicon.ErrXTSE0020, "xsl:merge-source @name %q is not a valid xs:QName", src.Name)
 		}
 	}
 
@@ -819,7 +819,7 @@ func (c *compiler) compileMerge(ctx context.Context, elem *helium.Element) (inst
 			continue
 		}
 		if _, ok := seenNames[name]; ok {
-			return nil, staticError(errCodeXTSE3190, "duplicate xsl:merge-source name %q", name)
+			return nil, staticError(lexicon.ErrXTSE3190, "duplicate xsl:merge-source name %q", name)
 		}
 		seenNames[name] = struct{}{}
 	}
@@ -863,7 +863,7 @@ func (c *compiler) compileMergeSource(ctx context.Context, elem *helium.Element)
 		if v, ok := parseXSDBool(streamVal); ok {
 			src.StreamableAttr = v
 		} else {
-			return nil, staticError(errCodeXTSE0020, "%q is not a valid value for xsl:merge-source/@streamable", streamVal)
+			return nil, staticError(lexicon.ErrXTSE0020, "%q is not a valid value for xsl:merge-source/@streamable", streamVal)
 		}
 	}
 
@@ -872,7 +872,7 @@ func (c *compiler) compileMergeSource(ctx context.Context, elem *helium.Element)
 		if v, ok := parseXSDBool(sortVal); ok {
 			src.SortBeforeMerge = v
 		} else {
-			return nil, staticError(errCodeXTSE0020, "%q is not a valid value for xsl:merge-source/@sort-before-merge", sortVal)
+			return nil, staticError(lexicon.ErrXTSE0020, "%q is not a valid value for xsl:merge-source/@sort-before-merge", sortVal)
 		}
 	}
 
@@ -923,19 +923,19 @@ func (c *compiler) compileMergeSource(ctx context.Context, elem *helium.Element)
 			src.Keys = append(src.Keys, mk)
 		} else {
 			// Any non-merge-key child is an error
-			return nil, staticError(errCodeXTSE0010, "unexpected child element in xsl:merge-source: %s", childElem.Name())
+			return nil, staticError(lexicon.ErrXTSE0010, "unexpected child element in xsl:merge-source: %s", childElem.Name())
 		}
 	}
 
 	// XTSE0010: merge-source must have at least a select, for-each-source,
 	// or for-each-item attribute.
 	if src.Select == nil && src.ForEachSource == nil && src.ForEachItem == nil {
-		return nil, staticError(errCodeXTSE0010, "xsl:merge-source requires at least one of select, for-each-source, or for-each-item attributes")
+		return nil, staticError(lexicon.ErrXTSE0010, "xsl:merge-source requires at least one of select, for-each-source, or for-each-item attributes")
 	}
 
 	// XTSE3195: for-each-source and for-each-item are mutually exclusive.
 	if src.ForEachSource != nil && src.ForEachItem != nil {
-		return nil, staticError(errCodeXTSE3195, "xsl:merge-source must not have both for-each-source and for-each-item attributes")
+		return nil, staticError(lexicon.ErrXTSE3195, "xsl:merge-source must not have both for-each-source and for-each-item attributes")
 	}
 
 	// XTSE3430: sort-before-merge="yes" is incompatible with streamable="yes".
@@ -958,7 +958,7 @@ func (c *compiler) compileMergeKey(ctx context.Context, elem *helium.Element) (*
 		case "select", "order", "collation", "data-type", "lang", "case-order":
 			// permitted
 		default:
-			return nil, staticError(errCodeXTSE0090, "attribute %q is not permitted on xsl:merge-key", attr.LocalName())
+			return nil, staticError(lexicon.ErrXTSE0090, "attribute %q is not permitted on xsl:merge-key", attr.LocalName())
 		}
 	}
 
@@ -994,12 +994,12 @@ func (c *compiler) compileMergeKey(ctx context.Context, elem *helium.Element) (*
 				if chElem.URI() == lexicon.NamespaceXSLT && chElem.LocalName() == lexicon.XSLTElementFallback {
 					continue
 				}
-				return nil, staticError(errCodeXTSE3200, "xsl:merge-key must not have both select attribute and sequence constructor")
+				return nil, staticError(lexicon.ErrXTSE3200, "xsl:merge-key must not have both select attribute and sequence constructor")
 			}
 			if txt, ok := ch.(*helium.Text); ok {
 				t := string(txt.Content())
 				if !c.shouldStripText(ctx, t) {
-					return nil, staticError(errCodeXTSE3200, "xsl:merge-key must not have both select attribute and sequence constructor")
+					return nil, staticError(lexicon.ErrXTSE3200, "xsl:merge-key must not have both select attribute and sequence constructor")
 				}
 			}
 		}
@@ -1065,10 +1065,10 @@ func mergeStreamCheck(inst *mergeInst) error {
 		}
 		for _, mk := range src.Keys {
 			if mk.OrderAVT != nil {
-				return staticError(errCodeXTSE3470, "xsl:merge-key @order must not be an AVT when xsl:merge-source is streamable")
+				return staticError(lexicon.ErrXTSE3470, "xsl:merge-key @order must not be an AVT when xsl:merge-source is streamable")
 			}
 			if mk.DataTypeAVT != nil {
-				return staticError(errCodeXTSE3470, "xsl:merge-key @data-type must not be an AVT when xsl:merge-source is streamable")
+				return staticError(lexicon.ErrXTSE3470, "xsl:merge-key @data-type must not be an AVT when xsl:merge-source is streamable")
 			}
 		}
 	}

@@ -71,7 +71,7 @@ func (ec *execContext) applyOnNoMatch(ctx context.Context, node helium.Node, mod
 		if node.Type() == helium.DocumentNode {
 			return ec.applyTemplatesToChildren(ctx, node, mode, paramValues...)
 		}
-		return dynamicError(errCodeXTDE0555, "no matching template in mode %q (on-no-match=fail)", mode)
+		return dynamicError(lexicon.ErrXTDE0555, "no matching template in mode %q (on-no-match=fail)", mode)
 	default: // "text-only-copy"
 		return ec.onNoMatchTextOnlyCopy(ctx, node, mode, paramValues...)
 	}

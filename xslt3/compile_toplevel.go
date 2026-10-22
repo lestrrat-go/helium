@@ -35,7 +35,7 @@ func (c *compiler) compileTopLevel(ctx context.Context, root *helium.Element) er
 	for child := range helium.Children(root) {
 		if child.Type() == helium.TextNode {
 			if strings.TrimSpace(string(child.Content())) != "" {
-				return staticError(errCodeXTSE0120, "non-whitespace text node in xsl:stylesheet")
+				return staticError(lexicon.ErrXTSE0120, "non-whitespace text node in xsl:stylesheet")
 			}
 		}
 	}
@@ -75,7 +75,7 @@ func (c *compiler) compileTopLevel(ctx context.Context, root *helium.Element) er
 	// (one that has xsl:import-schema). XTSE0020.
 	dv := c.stylesheet.defaultValidation
 	if (dv == validationStrict || dv == validationLax) && !c.stylesheet.schemaAware {
-		return staticError(errCodeXTSE0020,
+		return staticError(lexicon.ErrXTSE0020,
 			"default-validation=%q requires xsl:import-schema", dv)
 	}
 
@@ -171,7 +171,7 @@ func (c *compiler) compileTopLevel(ctx context.Context, root *helium.Element) er
 							// XPST0008, but not when a param has an external
 							// override (the override will be used instead).
 							if !hasExternal && isForwardRef(err, moduleStaticNames, name) {
-								return staticError(errCodeXPST0008,
+								return staticError(lexicon.ErrXPST0008,
 									"static %s %q references undefined variable: %v", ln, name, err)
 							}
 						}
@@ -259,7 +259,7 @@ func (c *compiler) compileTopLevel(ctx context.Context, root *helium.Element) er
 			// reached via xsl:import (it is allowed at top level and via
 			// xsl:include).
 			if c.insideImport {
-				return staticError(errCodeXTSE3008,
+				return staticError(lexicon.ErrXTSE3008,
 					"xsl:use-package is not allowed in an imported stylesheet module")
 			}
 			if uw := getAttr(elem, xslAttrUseWhen); uw != "" {
@@ -402,7 +402,7 @@ func (c *compiler) compileTopLevel(ctx context.Context, root *helium.Element) er
 		if elem.URI() != lexicon.NamespaceXSLT {
 			// XTSE0130: top-level elements in null namespace are not allowed.
 			if elem.URI() == "" {
-				return staticError(errCodeXTSE0130,
+				return staticError(lexicon.ErrXTSE0130,
 					"top-level element %q has no namespace; all top-level elements must be in a non-null namespace", elem.Name())
 			}
 			continue
@@ -542,7 +542,7 @@ func (c *compiler) compileTopLevel(ctx context.Context, root *helium.Element) er
 			// forward compatibility.
 			elemVer := getAttr(elem, "version")
 			if !isForwardsCompatible(c.effectiveVersion) && !isForwardsCompatible(elemVer) {
-				return staticError(errCodeXTSE0010,
+				return staticError(lexicon.ErrXTSE0010,
 					"element xsl:%s is not allowed as a top-level declaration", elem.LocalName())
 			}
 		}
@@ -604,7 +604,7 @@ func (c *compiler) checkConflictingNamespaceAliases(_ context.Context) error {
 		}
 		for prec, results := range precResults {
 			if len(results) > 1 && prec >= maxPrec[uri] {
-				return staticError(errCodeXTSE0810,
+				return staticError(lexicon.ErrXTSE0810,
 					"conflicting namespace-alias declarations for namespace %q with different result namespaces at the same import precedence", uri)
 			}
 		}
@@ -623,10 +623,10 @@ func (c *compiler) compileNamespaceAlias(ctx context.Context, elem *helium.Eleme
 	resultPrefix, hasResultPrefix := elem.GetAttribute("result-prefix")
 
 	if !hasStylesheetPrefix {
-		return staticError(errCodeXTSE0010, "xsl:namespace-alias requires stylesheet-prefix attribute")
+		return staticError(lexicon.ErrXTSE0010, "xsl:namespace-alias requires stylesheet-prefix attribute")
 	}
 	if !hasResultPrefix {
-		return staticError(errCodeXTSE0010, "xsl:namespace-alias requires result-prefix attribute")
+		return staticError(lexicon.ErrXTSE0010, "xsl:namespace-alias requires result-prefix attribute")
 	}
 
 	// Build a local namespace map from the element's in-scope namespaces.
@@ -646,7 +646,7 @@ func (c *compiler) compileNamespaceAlias(ctx context.Context, elem *helium.Eleme
 	} else {
 		uri, ok := localNS[stylesheetPrefix]
 		if !ok {
-			return staticError(errCodeXTSE0010, "xsl:namespace-alias: stylesheet-prefix %q is not bound to a namespace", stylesheetPrefix)
+			return staticError(lexicon.ErrXTSE0010, "xsl:namespace-alias: stylesheet-prefix %q is not bound to a namespace", stylesheetPrefix)
 		}
 		stylesheetURI = uri
 	}
@@ -664,7 +664,7 @@ func (c *compiler) compileNamespaceAlias(ctx context.Context, elem *helium.Eleme
 	default:
 		uri, ok := localNS[resultPrefix]
 		if !ok {
-			return staticError(errCodeXTSE0010, "xsl:namespace-alias: result-prefix %q is not bound to a namespace", resultPrefix)
+			return staticError(lexicon.ErrXTSE0010, "xsl:namespace-alias: result-prefix %q is not bound to a namespace", resultPrefix)
 		}
 		resultURI = uri
 		resultPfx = resultPrefix

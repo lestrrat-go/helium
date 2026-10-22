@@ -185,7 +185,7 @@ func (c *compiler) compileTemplate(ctx context.Context, elem *helium.Element) er
 		if v, ok := parseXSDBool(et); ok {
 			c.expandText = v
 		} else {
-			return staticError(errCodeXTSE0020, "%q is not a valid value for xsl:template/@expand-text", et)
+			return staticError(lexicon.ErrXTSE0020, "%q is not a valid value for xsl:template/@expand-text", et)
 		}
 	}
 
@@ -235,7 +235,7 @@ func (c *compiler) compileTemplate(ctx context.Context, elem *helium.Element) er
 		if existing, exists := c.stylesheet.namedTemplates[tmpl.Name]; exists {
 			// Same import precedence = error; different = higher precedence wins
 			if existing.ImportPrec == tmpl.ImportPrec {
-				return staticError(errCodeXTSE0080, "duplicate template name %q", tmpl.Name)
+				return staticError(lexicon.ErrXTSE0080, "duplicate template name %q", tmpl.Name)
 			}
 			if tmpl.ImportPrec > existing.ImportPrec {
 				c.stylesheet.namedTemplates[tmpl.Name] = tmpl
@@ -263,7 +263,7 @@ func (c *compiler) compileTemplate(ctx context.Context, elem *helium.Element) er
 func (c *compiler) checkTemplateName(ctx context.Context, elem *helium.Element, matchAttr string) (string, error) {
 	nameAttr := strings.TrimSpace(getAttr(elem, "name"))
 	if nameAttr != "" && !xmlchar.IsValidQName(nameAttr) && !isValidEQName(nameAttr) {
-		return "", staticError(errCodeXTSE0020, "invalid name %q on xsl:template", nameAttr)
+		return "", staticError(lexicon.ErrXTSE0020, "invalid name %q on xsl:template", nameAttr)
 	}
 	if nameAttr != "" {
 		if err := c.checkQNamePrefix(ctx, nameAttr, "xsl:template"); err != nil {
@@ -275,26 +275,26 @@ func (c *compiler) checkTemplateName(ctx context.Context, elem *helium.Element, 
 	// XTSE0080: template name must not be in the XSLT namespace
 	// Exception: xsl:initial-template is explicitly allowed (XSLT 3.0 §3.11).
 	if name != "" && strings.HasPrefix(name, "{"+lexicon.NamespaceXSLT+"}") && name != helium.ClarkName(lexicon.NamespaceXSLT, "initial-template") {
-		return "", staticError(errCodeXTSE0080, "xsl:template name %q is in the XSLT namespace", getAttr(elem, "name"))
+		return "", staticError(lexicon.ErrXTSE0080, "xsl:template name %q is in the XSLT namespace", getAttr(elem, "name"))
 	}
 
 	// XTSE0500: template must have match or name (or both).
 	if matchAttr == "" && name == "" {
-		return "", staticError(errCodeXTSE0500, "xsl:template must have a @match or @name attribute")
+		return "", staticError(lexicon.ErrXTSE0500, "xsl:template must have a @match or @name attribute")
 	}
 	// XTSE0500: template without match must not have mode or priority.
 	if matchAttr == "" {
 		if _, hasMode := elem.GetAttribute("mode"); hasMode {
-			return "", staticError(errCodeXTSE0500, "xsl:template without @match must not have @mode")
+			return "", staticError(lexicon.ErrXTSE0500, "xsl:template without @match must not have @mode")
 		}
 		if _, hasPrio := elem.GetAttribute("priority"); hasPrio {
-			return "", staticError(errCodeXTSE0500, "xsl:template without @match must not have @priority")
+			return "", staticError(lexicon.ErrXTSE0500, "xsl:template without @match must not have @priority")
 		}
 	}
 	// XTSE0500: template without name must not have visibility.
 	if name == "" {
 		if _, hasVis := elem.GetAttribute("visibility"); hasVis {
-			return "", staticError(errCodeXTSE0500, "xsl:template without @name must not have @visibility")
+			return "", staticError(lexicon.ErrXTSE0500, "xsl:template without @name must not have @visibility")
 		}
 	}
 	return name, nil
@@ -307,7 +307,7 @@ func (c *compiler) checkTemplateMode(elem *helium.Element) error {
 	if modeAttrVal, hasMode := elem.GetAttribute("mode"); hasMode {
 		// XTSE0550: empty mode list is invalid.
 		if strings.TrimSpace(modeAttrVal) == "" {
-			return staticError(errCodeXTSE0550, "mode attribute on xsl:template must not be empty")
+			return staticError(lexicon.ErrXTSE0550, "mode attribute on xsl:template must not be empty")
 		}
 	}
 	modeAttr := getAttr(elem, "mode")
@@ -319,25 +319,25 @@ func (c *compiler) checkTemplateMode(elem *helium.Element) error {
 	hasAll := false
 	for _, m := range modeFields {
 		if m[0] != '#' && !xmlchar.IsValidQName(m) && !isValidEQName(m) {
-			return staticError(errCodeXTSE0550, "invalid mode name %q on xsl:template", m)
+			return staticError(lexicon.ErrXTSE0550, "invalid mode name %q on xsl:template", m)
 		}
 		// XTSE0280: check for undeclared prefix in mode name.
 		if idx := strings.IndexByte(m, ':'); idx > 0 {
 			prefix := m[:idx]
 			if _, ok := c.nsBindings[prefix]; !ok {
-				return staticError(errCodeXTSE0280, "undeclared namespace prefix %q in mode name %q", prefix, m)
+				return staticError(lexicon.ErrXTSE0280, "undeclared namespace prefix %q in mode name %q", prefix, m)
 			}
 		}
 		if m == modeAll {
 			hasAll = true
 		}
 		if _, dup := seenModes[m]; dup {
-			return staticError(errCodeXTSE0550, "duplicate mode %q in xsl:template/@mode", m)
+			return staticError(lexicon.ErrXTSE0550, "duplicate mode %q in xsl:template/@mode", m)
 		}
 		seenModes[m] = struct{}{}
 	}
 	if hasAll && len(modeFields) > 1 {
-		return staticError(errCodeXTSE0550, "#all must not appear with other modes in xsl:template/@mode")
+		return staticError(lexicon.ErrXTSE0550, "#all must not appear with other modes in xsl:template/@mode")
 	}
 	return nil
 }
@@ -347,13 +347,13 @@ func (c *compiler) checkTemplateMode(elem *helium.Element) error {
 func parseTemplatePriority(prio string) (float64, error) {
 	// XTSE0530: priority must be a valid xs:decimal — no exponent notation.
 	if !isXSDecimal(prio) {
-		return 0, staticError(errCodeXTSE0530, "priority %q is not a valid xs:decimal", prio)
+		return 0, staticError(lexicon.ErrXTSE0530, "priority %q is not a valid xs:decimal", prio)
 	}
 	// xs:decimal ignores leading and trailing whitespace; isXSDecimal already
 	// trims it, so ParseFloat must see the trimmed form too.
 	f, err := strconv.ParseFloat(strings.TrimSpace(prio), 64)
 	if err != nil {
-		return 0, staticError(errCodeXTSE0530, "invalid priority %q: %v", prio, err)
+		return 0, staticError(lexicon.ErrXTSE0530, "invalid priority %q: %v", prio, err)
 	}
 	return f, nil
 }
@@ -474,16 +474,16 @@ func (c *compiler) compileTemplateBodyEx(ctx context.Context, elem *helium.Eleme
 			if v.URI() == lexicon.NamespaceXSLT && v.LocalName() == lexicon.XSLTElementContextItem {
 				// XTSE0010: xsl:context-item is not allowed in xsl:function
 				if isFunction {
-					return nil, nil, nil, staticError(errCodeXTSE0010, "xsl:context-item is not allowed in xsl:function")
+					return nil, nil, nil, staticError(lexicon.ErrXTSE0010, "xsl:context-item is not allowed in xsl:function")
 				}
 				if sawContextItem {
-					return nil, nil, nil, staticError(errCodeXTSE0010, "duplicate xsl:context-item")
+					return nil, nil, nil, staticError(lexicon.ErrXTSE0010, "duplicate xsl:context-item")
 				}
 				if sawContent {
-					return nil, nil, nil, staticError(errCodeXTSE0010, "xsl:context-item must appear before other children")
+					return nil, nil, nil, staticError(lexicon.ErrXTSE0010, "xsl:context-item must appear before other children")
 				}
 				if len(params) > 0 {
-					return nil, nil, nil, staticError(errCodeXTSE0010, "xsl:context-item must appear before xsl:param")
+					return nil, nil, nil, staticError(lexicon.ErrXTSE0010, "xsl:context-item must appear before xsl:param")
 				}
 				if err := c.validateContextItem(ctx, v); err != nil {
 					return nil, nil, nil, err
@@ -503,7 +503,7 @@ func (c *compiler) compileTemplateBodyEx(ctx context.Context, elem *helium.Eleme
 				// XTSE0020: static is only valid on global params, not template/function params
 				if _, hasStatic := v.GetAttribute("static"); hasStatic {
 					pname := getAttr(v, "name")
-					return nil, nil, nil, staticError(errCodeXTSE0020,
+					return nil, nil, nil, staticError(lexicon.ErrXTSE0020,
 						"xsl:param %q: static attribute is not allowed on template/function parameters", pname)
 				}
 				p, err := c.compileParamDef(ctx, v)
@@ -517,7 +517,7 @@ func (c *compiler) compileTemplateBodyEx(ctx context.Context, elem *helium.Eleme
 				continue
 			}
 			if v.URI() == lexicon.NamespaceXSLT && v.LocalName() == lexicon.XSLTElementParam {
-				return nil, nil, nil, staticError(errCodeXTSE0010,
+				return nil, nil, nil, staticError(lexicon.ErrXTSE0010,
 					"xsl:param must appear before other content in xsl:template/xsl:function")
 			}
 			inParams = false
@@ -569,7 +569,7 @@ func (c *compiler) compileTemplateBodyEx(ctx context.Context, elem *helium.Eleme
 	seen := make(map[string]struct{}, len(params))
 	for _, p := range params {
 		if _, dup := seen[p.Name]; dup {
-			return nil, nil, nil, staticError(errCodeXTSE0580, "duplicate parameter name %q", p.Name)
+			return nil, nil, nil, staticError(lexicon.ErrXTSE0580, "duplicate parameter name %q", p.Name)
 		}
 		seen[p.Name] = struct{}{}
 	}
@@ -597,7 +597,7 @@ func (c *compiler) validateContextItem(ctx context.Context, elem *helium.Element
 		if len(trimmed) > 0 {
 			last := trimmed[len(trimmed)-1]
 			if last == '?' || last == '*' || last == '+' {
-				return staticError(errCodeXTSE0020,
+				return staticError(lexicon.ErrXTSE0020,
 					"xsl:context-item/@as must not have an occurrence indicator: %q", asAttr)
 			}
 		}
@@ -605,24 +605,24 @@ func (c *compiler) validateContextItem(ctx context.Context, elem *helium.Element
 
 	useAttr := strings.TrimSpace(getAttr(elem, "use"))
 	if useAttr != "" && useAttr != ctxItemRequired && useAttr != ctxItemOptional && useAttr != ctxItemAbsent {
-		return staticError(errCodeXTSE0020,
+		return staticError(lexicon.ErrXTSE0020,
 			"xsl:context-item/@use must be 'required', 'optional', or 'absent': %q", useAttr)
 	}
 
 	// XTSE0020: if use="absent", cannot also have as=
 	if useAttr == ctxItemAbsent && asAttr != "" {
-		return staticError(errCodeXTSE0020,
+		return staticError(lexicon.ErrXTSE0020,
 			"xsl:context-item with use=\"absent\" must not have @as")
 	}
 
 	// xsl:context-item must not have child elements or text content
 	for child := range helium.Children(elem) {
 		if child.Type() == helium.ElementNode {
-			return staticError(errCodeXTSE0010, "xsl:context-item must be empty")
+			return staticError(lexicon.ErrXTSE0010, "xsl:context-item must be empty")
 		}
 		if child.Type() == helium.TextNode {
 			if !c.shouldStripText(ctx, string(child.Content())) {
-				return staticError(errCodeXTSE0010, "xsl:context-item must be empty")
+				return staticError(lexicon.ErrXTSE0010, "xsl:context-item must be empty")
 			}
 		}
 	}
@@ -649,10 +649,10 @@ func (c *compiler) compileParamDef(ctx context.Context, elem *helium.Element) (*
 
 	name := getAttr(elem, "name")
 	if name == "" {
-		return nil, staticError(errCodeXTSE0110, "xsl:param requires name attribute")
+		return nil, staticError(lexicon.ErrXTSE0110, "xsl:param requires name attribute")
 	}
 	if !xmlchar.IsValidQName(name) && !isValidEQName(name) {
-		return nil, staticError(errCodeXTSE0020, "invalid name %q on xsl:param", name)
+		return nil, staticError(lexicon.ErrXTSE0020, "invalid name %q on xsl:param", name)
 	}
 
 	// Validate boolean attribute values (including empty string)
@@ -673,16 +673,16 @@ func (c *compiler) compileParamDef(ctx context.Context, elem *helium.Element) (*
 	if required {
 		selectAttr := getAttr(elem, "select")
 		if selectAttr != "" {
-			return nil, staticError(errCodeXTSE0010, "xsl:param with required='yes' must not have a select attribute")
+			return nil, staticError(lexicon.ErrXTSE0010, "xsl:param with required='yes' must not have a select attribute")
 		}
 		// Check for non-whitespace body content
 		for child := range helium.Children(elem) {
 			switch child.Type() {
 			case helium.ElementNode:
-				return nil, staticError(errCodeXTSE0010, "xsl:param with required='yes' must not have content")
+				return nil, staticError(lexicon.ErrXTSE0010, "xsl:param with required='yes' must not have content")
 			case helium.TextNode, helium.CDATASectionNode:
 				if strings.TrimSpace(string(child.Content())) != "" {
-					return nil, staticError(errCodeXTSE0010, "xsl:param with required='yes' must not have content")
+					return nil, staticError(lexicon.ErrXTSE0010, "xsl:param with required='yes' must not have content")
 				}
 			}
 		}
@@ -701,7 +701,7 @@ func (c *compiler) compileParamDef(ctx context.Context, elem *helium.Element) (*
 
 	// XTSE0020: static parameter must not have tunnel="yes"
 	if isStatic && xsdBoolTrue(getAttr(elem, "tunnel")) {
-		return nil, staticError(errCodeXTSE0020,
+		return nil, staticError(lexicon.ErrXTSE0020,
 			"xsl:param %q with static='yes' must not have tunnel='yes'", name)
 	}
 
@@ -709,11 +709,11 @@ func (c *compiler) compileParamDef(ctx context.Context, elem *helium.Element) (*
 		for child := range helium.Children(elem) {
 			switch child.Type() {
 			case helium.ElementNode:
-				return nil, staticError(errCodeXTSE0010,
+				return nil, staticError(lexicon.ErrXTSE0010,
 					"xsl:param %q with static='yes' must not have content (use select attribute instead)", name)
 			case helium.TextNode, helium.CDATASectionNode:
 				if strings.TrimSpace(string(child.Content())) != "" {
-					return nil, staticError(errCodeXTSE0010,
+					return nil, staticError(lexicon.ErrXTSE0010,
 						"xsl:param %q with static='yes' must not have content (use select attribute instead)", name)
 				}
 			}
@@ -789,10 +789,10 @@ func (c *compiler) compileGlobalVariable(ctx context.Context, elem *helium.Eleme
 
 	name := getAttr(elem, "name")
 	if name == "" {
-		return staticError(errCodeXTSE0110, "xsl:variable requires name attribute")
+		return staticError(lexicon.ErrXTSE0110, "xsl:variable requires name attribute")
 	}
 	if !xmlchar.IsValidQName(name) && !isValidEQName(name) {
-		return staticError(errCodeXTSE0020, "invalid name %q on xsl:variable", name)
+		return staticError(lexicon.ErrXTSE0020, "invalid name %q on xsl:variable", name)
 	}
 
 	// XTSE0020: validate static attribute (boolean)
@@ -805,7 +805,7 @@ func (c *compiler) compileGlobalVariable(ctx context.Context, elem *helium.Eleme
 	// XTSE0020: static variable must not have visibility attribute
 	if xsdBoolTrue(getAttr(elem, "static")) {
 		if vis := getAttr(elem, "visibility"); vis != "" {
-			return staticError(errCodeXTSE0020,
+			return staticError(lexicon.ErrXTSE0020,
 				"xsl:variable %q with static='yes' must not have visibility attribute", name)
 		}
 	}
@@ -845,7 +845,7 @@ func (c *compiler) compileGlobalVariable(ctx context.Context, elem *helium.Eleme
 		// XTSE0620: select and non-empty content are mutually exclusive.
 		// Use-when-aware check: elements excluded by use-when don't count as content.
 		if c.hasEffectiveContent(ctx, elem) {
-			return staticError(errCodeXTSE0620, "xsl:variable %q has both @select and content", name)
+			return staticError(lexicon.ErrXTSE0620, "xsl:variable %q has both @select and content", name)
 		}
 		expr, err := c.compileXPath(selectAttr, c.nsBindings)
 		if err != nil {
@@ -854,7 +854,7 @@ func (c *compiler) compileGlobalVariable(ctx context.Context, elem *helium.Eleme
 		// XPST0008: a global variable is out of scope within its own
 		// declaration. Detect self-references in the select expression.
 		if xpathExprReferencesVar(expr.AST(), name, c.nsBindings) {
-			return staticError(errCodeXPST0008,
+			return staticError(lexicon.ErrXPST0008,
 				"global variable %q references itself in its select expression", name)
 		}
 		v.Select = expr
@@ -870,12 +870,12 @@ func (c *compiler) compileGlobalVariable(ctx context.Context, elem *helium.Eleme
 	// Only flag duplicates within the same module (same importPrec).
 	for _, existing := range c.stylesheet.globalVars {
 		if existing.Name == v.Name && existing.ImportPrec == c.importPrec {
-			return staticError(errCodeXTSE0630, "duplicate global variable %q", v.Name)
+			return staticError(lexicon.ErrXTSE0630, "duplicate global variable %q", v.Name)
 		}
 	}
 	for _, existing := range c.stylesheet.globalParams {
 		if existing.Name == v.Name && existing.ImportPrec == c.importPrec {
-			return staticError(errCodeXTSE0630, "duplicate global variable/param %q", v.Name)
+			return staticError(lexicon.ErrXTSE0630, "duplicate global variable/param %q", v.Name)
 		}
 	}
 	v.ImportPrec = c.importPrec
@@ -892,7 +892,7 @@ func (c *compiler) compileGlobalParam(ctx context.Context, elem *helium.Element)
 	}
 	// XTSE0020: tunnel="yes" is not allowed on a stylesheet parameter
 	if getAttr(elem, "tunnel") == lexicon.ValueYes {
-		return staticError(errCodeXTSE0020, "tunnel=\"yes\" is not allowed on a stylesheet parameter")
+		return staticError(lexicon.ErrXTSE0020, "tunnel=\"yes\" is not allowed on a stylesheet parameter")
 	}
 	p, err := c.compileParamDef(ctx, elem)
 	if err != nil {
@@ -901,12 +901,12 @@ func (c *compiler) compileGlobalParam(ctx context.Context, elem *helium.Element)
 	// XTSE0630: duplicate global param/variable with same name and same import precedence
 	for _, existing := range c.stylesheet.globalParams {
 		if existing.Name == p.Name && existing.ImportPrec == c.importPrec {
-			return staticError(errCodeXTSE0630, "duplicate global param %q", p.Name)
+			return staticError(lexicon.ErrXTSE0630, "duplicate global param %q", p.Name)
 		}
 	}
 	for _, existing := range c.stylesheet.globalVars {
 		if existing.Name == p.Name && existing.ImportPrec == c.importPrec {
-			return staticError(errCodeXTSE0630, "duplicate global param/variable %q", p.Name)
+			return staticError(lexicon.ErrXTSE0630, "duplicate global param/variable %q", p.Name)
 		}
 	}
 	p.ImportPrec = c.importPrec

@@ -54,10 +54,10 @@ func validateDateTimeStampSource(v AtomicValue) error {
 	}
 	t, ok := v.Value.(time.Time)
 	if !ok {
-		return &XPathError{Code: errCodeFORG0001, Message: msgDateTimeStampTimezone}
+		return &XPathError{Code: lexicon.ErrFORG0001, Message: msgDateTimeStampTimezone}
 	}
 	if !HasTimezone(t) {
-		return &XPathError{Code: errCodeFORG0001, Message: msgDateTimeStampTimezone}
+		return &XPathError{Code: lexicon.ErrFORG0001, Message: msgDateTimeStampTimezone}
 	}
 	return nil
 }
@@ -66,7 +66,7 @@ func validateDateTimeStampSource(v AtomicValue) error {
 func CastAtomic(v AtomicValue, targetType string) (AtomicValue, error) {
 	if isAbstractCastTarget(targetType) {
 		return AtomicValue{}, &XPathError{
-			Code:    errCodeXPST0080,
+			Code:    lexicon.ErrXPST0080,
 			Message: "cannot cast to abstract type " + targetType,
 		}
 	}
@@ -78,10 +78,10 @@ func CastAtomic(v AtomicValue, targetType string) (AtomicValue, error) {
 	if targetType == TypeDateTimeStamp && v.TypeName == TypeDateTimeStamp {
 		t, ok := v.Value.(time.Time)
 		if !ok {
-			return AtomicValue{}, &XPathError{Code: errCodeFORG0001, Message: msgDateTimeStampTimezone}
+			return AtomicValue{}, &XPathError{Code: lexicon.ErrFORG0001, Message: msgDateTimeStampTimezone}
 		}
 		if !HasTimezone(t) {
-			return AtomicValue{}, &XPathError{Code: errCodeFORG0001, Message: msgDateTimeStampTimezone}
+			return AtomicValue{}, &XPathError{Code: lexicon.ErrFORG0001, Message: msgDateTimeStampTimezone}
 		}
 		return v, nil
 	}
@@ -206,10 +206,10 @@ func CastAtomic(v AtomicValue, targetType string) (AtomicValue, error) {
 		if v.TypeName == TypeDateTime || v.TypeName == TypeDate {
 			t, ok := v.Value.(time.Time)
 			if !ok {
-				return AtomicValue{}, &XPathError{Code: errCodeFORG0001, Message: msgDateTimeStampTimezone}
+				return AtomicValue{}, &XPathError{Code: lexicon.ErrFORG0001, Message: msgDateTimeStampTimezone}
 			}
 			if !HasTimezone(t) {
-				return AtomicValue{}, &XPathError{Code: errCodeFORG0001, Message: msgDateTimeStampTimezone}
+				return AtomicValue{}, &XPathError{Code: lexicon.ErrFORG0001, Message: msgDateTimeStampTimezone}
 			}
 			return AtomicValue{TypeName: TypeDateTimeStamp, Value: t}, nil
 		}
@@ -219,7 +219,7 @@ func CastAtomic(v AtomicValue, targetType string) (AtomicValue, error) {
 			return AtomicValue{}, err
 		}
 		if !HasTimezone(dt.TimeVal()) {
-			return AtomicValue{}, &XPathError{Code: errCodeFORG0001, Message: msgDateTimeStampTimezone}
+			return AtomicValue{}, &XPathError{Code: lexicon.ErrFORG0001, Message: msgDateTimeStampTimezone}
 		}
 		dt.TypeName = TypeDateTimeStamp
 		return dt, nil
@@ -412,7 +412,7 @@ func CastFromString(s string, targetType string) (AtomicValue, error) {
 			return AtomicValue{}, castError(s, targetType)
 		}
 		if !HasTimezone(t) {
-			return AtomicValue{}, &XPathError{Code: errCodeFORG0001, Message: msgDateTimeStampTimezone}
+			return AtomicValue{}, &XPathError{Code: lexicon.ErrFORG0001, Message: msgDateTimeStampTimezone}
 		}
 		return AtomicValue{TypeName: TypeDateTimeStamp, Value: t}, nil
 	case TypeTime:
@@ -687,7 +687,7 @@ func integerTypeRange(typeName string) (minVal *big.Int, maxVal *big.Int) {
 
 func castError(value string, targetType string) *XPathError {
 	return &XPathError{
-		Code:    errCodeFORG0001,
+		Code:    lexicon.ErrFORG0001,
 		Message: fmt.Sprintf("cannot cast %q to %s", value, targetType),
 	}
 }
@@ -698,7 +698,7 @@ func castError(value string, targetType string) *XPathError {
 func durationCastError(err error, value, targetType string) *XPathError {
 	if errors.Is(err, errDurationMonthsRange) {
 		return &XPathError{
-			Code:    errCodeFODT0002,
+			Code:    lexicon.ErrFODT0002,
 			Message: fmt.Sprintf("cannot cast %q to %s: duration overflow", value, targetType),
 		}
 	}
@@ -711,13 +711,13 @@ func durationCastError(err error, value, targetType string) *XPathError {
 func checkBigIntRange(n, minVal, maxVal *big.Int, typeName string) error {
 	if minVal != nil && n.Cmp(minVal) < 0 {
 		return &XPathError{
-			Code:    errCodeFORG0001,
+			Code:    lexicon.ErrFORG0001,
 			Message: fmt.Sprintf("value %s out of range for %s", n.String(), typeName),
 		}
 	}
 	if maxVal != nil && n.Cmp(maxVal) > 0 {
 		return &XPathError{
-			Code:    errCodeFORG0001,
+			Code:    lexicon.ErrFORG0001,
 			Message: fmt.Sprintf("value %s out of range for %s", n.String(), typeName),
 		}
 	}
