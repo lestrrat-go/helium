@@ -78,6 +78,15 @@ func TestSerializeResult(t *testing.T) {
 			})
 		}
 
+		var omitted bytes.Buffer
+		err = xslt3.SerializeResult(&omitted, doc, &xslt3.OutputDef{
+			Method:          outMethodXML,
+			Encoding:        "US-ASCII",
+			OmitDeclaration: true,
+		})
+		require.NoError(t, err)
+		require.Equal(t, `<root title="caf&#xE9;">caf&#xE9; &#x1F600;</root>`, omitted.String())
+
 		namedDoc, err := helium.NewParser().Parse(t.Context(), []byte(`<élément/>`))
 		require.NoError(t, err)
 		err = xslt3.SerializeResult(&bytes.Buffer{}, namedDoc, &xslt3.OutputDef{

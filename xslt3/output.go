@@ -427,7 +427,7 @@ func serializeResult(w io.Writer, doc *helium.Document, outDef *OutputDef, charM
 			return transcodeToUTF16(w, data)
 		}
 		if needsEncodingConversion {
-			return transcodeToEncoding(w, data, enc, outDef.Method == methodXML)
+			return transcodeToEncoding(w, data, enc, outDef.Encoding, outDef.Method == methodXML)
 		}
 		return writeFullBytes(w, data)
 	}

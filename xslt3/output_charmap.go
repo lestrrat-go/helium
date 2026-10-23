@@ -180,8 +180,9 @@ func transcodeToUTF16(w io.Writer, utf8Data []byte) error {
 
 // transcodeToEncoding converts UTF-8 bytes to the target encoding,
 // replacing characters that cannot be represented with XML character references.
-func transcodeToEncoding(w io.Writer, utf8Data []byte, encName string, xmlOutput bool) error {
+func transcodeToEncoding(w io.Writer, utf8Data []byte, encName, outputLabel string, xmlOutput bool) error {
 	if xmlOutput && xmlencoding.IsASCII(encName) {
+		utf8Data = addEncodingToXMLDeclaration(utf8Data, outputLabel)
 		return transcodeXMLToASCII(w, utf8Data)
 	}
 
@@ -220,6 +221,22 @@ func transcodeToEncoding(w io.Writer, utf8Data []byte, encName string, xmlOutput
 		utf8Data = utf8Data[size:]
 	}
 	return nil
+}
+
+func addEncodingToXMLDeclaration(data []byte, encName string) []byte {
+	if !bytes.HasPrefix(data, []byte("<?xml ")) {
+		return data
+	}
+	declarationEnd := bytes.Index(data, []byte("?>"))
+	if declarationEnd < 0 {
+		return data
+	}
+	encodedName := []byte(` encoding="` + encName + `"`)
+	result := make([]byte, 0, len(data)+len(encodedName))
+	result = append(result, data[:declarationEnd]...)
+	result = append(result, encodedName...)
+	result = append(result, data[declarationEnd:]...)
+	return result
 }
 
 // transcodeXMLToASCII writes XML in US-ASCII, using character references in

@@ -6,6 +6,7 @@ import (
 	"strings"
 
 	"github.com/lestrrat-go/helium"
+	xmlencoding "github.com/lestrrat-go/helium/internal/encoding"
 	"github.com/lestrrat-go/helium/internal/lexicon"
 	"github.com/lestrrat-go/helium/internal/writerctl"
 	"github.com/lestrrat-go/helium/stream"
@@ -195,6 +196,10 @@ func serializeXMLWithCharMapInner(w io.Writer, doc *helium.Document, outDef *Out
 		enc := outDef.Encoding
 		if enc == "" {
 			enc = lexicon.EncodingUTF8U
+		} else if xmlencoding.IsASCII(enc) {
+			// stream.Writer emits UTF-8 directly and refuses an ASCII declaration.
+			// The outer serializer transcodes the completed XML to US-ASCII.
+			enc = ""
 		}
 		// The output XML version defaults to 1.0; xsl:output/@version="1.1"
 		// selects an XML 1.1 declaration.
