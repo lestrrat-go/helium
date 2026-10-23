@@ -180,16 +180,24 @@ Error/trace: `error` (raises `FOER0000` with optional code/description/value), `
 ### `functions_aggregate.go`
 `count`, `avg`, `max`, `min`, `sum`, `distinct-values`
 
+`sum` uses checked atomization, including nested and empty array members, and bounds the atom buffer by the
+configured sequence limit. Atomization, numeric accumulation, and duration accumulation charge operations
+and honor cancellation without first materializing a borrowed input sequence.
+
 ### `functions_sequence.go`
 `empty`, `exists`, `head`, `tail`, `insert-before`, `remove`, `reverse`, `subsequence`, `unordered`, `zero-or-one`,
 `one-or-more`, `exactly-one`, `deep-equal`, `index-of`, `sort`
 
-`reverse`, `insert-before`, and `sort` consume sequences through bounded,
+`tail`, `reverse`, `insert-before`, and `sort` consume sequences through bounded,
 operation-counted iteration before building results. They stop at the configured
 sequence/node-set limit or when the evaluation context cancels. `sort` also
 checks cancellation and charges each key evaluation and comparison. It atomizes
 every default or function-produced sort key before sorting and propagates typed
 value errors such as `FOTY0012` and `FOTY0013`.
+
+`deep-equal` passes the context through sequence, array, map, node, child, and attribute comparisons. It charges
+comparison work and stops on cancellation or an expired deadline, including when nested members are empty.
+Map comparisons read internal values without cloning them before traversal.
 
 ### `functions_datetime.go`
 Constructors: `dateTime`

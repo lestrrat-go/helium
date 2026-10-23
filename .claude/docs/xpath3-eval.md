@@ -494,10 +494,12 @@ and the default xpath3 behavior is unchanged.
 | Sequence/node-set size | 10M | `internal/xpath.DefaultMaxNodeSetLength` |
 
 Range expressions (`1 to N`) and `for` clauses also check sequence size limit.
-`reverse`, `insert-before`, and `sort` charge sequence traversal and output work
+`tail`, `reverse`, `insert-before`, and `sort` charge sequence traversal and output work
 per item; `sort` also charges key evaluation and key comparisons. These loops
 check cancellation through the same operation accounting. `Evaluate` and
 `EvaluateEBV` reject a context already cancelled at entry.
+`sum` charges atomization and accumulation, including nested array members; `deep-equal` charges its recursive
+comparisons and map/attribute searches. Both stop without consuming the rest of a cancelled input.
 
 The limits hold where int is 32 bits:
 - The op counter saturates at `math.MaxInt` instead of wrapping (`countOps`; xpath1 does the same), and a
