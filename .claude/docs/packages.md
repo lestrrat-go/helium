@@ -982,7 +982,7 @@ XSLT 3.0 stylesheet compilation + transformation on helium DOM with `xpath3` eva
   `schema_context.go`, `schema_resolver_fs.go`, `package_*.go`, `streamability*.go`, `errors.go`,
   `resource_limit.go` (per-resource read cap + `MaxResourceBytes`/`ErrResourceTooLarge`); the XSLT element
   registry lives in `xslt3/internal/elements` (`elements.go`, `data.go`, see below)
-- Imports: helium, enum, html, stream, xpath3, xsd, internal/domutil, internal/intconv, internal/iofs,
+- Imports: helium, enum, html, stream, xpath3, xsd, internal/encoding, internal/domutil, internal/intconv, internal/iofs,
   internal/iolimit, internal/lexicon, internal/nodelink, internal/sequence, internal/uripath, internal/writerctl,
   internal/xmlchar, internal/xpath, internal/xpathstream, xslt3/internal/elements
 - Tests: hand-written unit tests only. The W3C XSLT 3.0 conformance suite lives in the sibling `helium-w3c-tests` module
