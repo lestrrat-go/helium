@@ -333,6 +333,9 @@ matches any joined sentinel (see `dynamicErrorCause`).
 - `"invalid name start char"` → `"expected element name after <"`
 - Namespace errors mapped to stdlib phrasing
 
+Declaration/charset initialization errors are retained by `Decoder`; repeated token reads return the same
+error even when no SAX event channel was started.
+
 ### XML Digital Signatures (`xmldsig1/errors.go`)
 
 Per-reference failures use parallel wrapper types so sign and verify report the offending Reference

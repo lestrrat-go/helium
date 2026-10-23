@@ -58,6 +58,7 @@ type Decoder struct {
 	startSAX        func(io.Reader) // deferred SAX emitter start; captures cancel context in closure
 	lastToken       Token
 	savedErr        error
+	initErr         error // persistent failure before the SAX emitter starts
 	offset          int64
 	line            int
 	column          int
@@ -313,14 +314,11 @@ func (d *Decoder) startSAXEmitter(ctx context.Context, r io.Reader) {
 
 	go func() {
 		defer close(d.events)
-		// The parser is handed a document whose entire prolog (the XML
-		// declaration, comments, PIs, and directives) has been blanked out to
-		// spaces by scanProlog, which tokenized the prolog itself and delivered
-		// those tokens directly. So the parser re-emits none of them, and never
-		// parses a declaration in context on this path; checkXMLDecl instead
-		// reconstructs the drained declaration and asks helium to judge it, so
-		// the verdict is still helium's.
-		p := helium.NewParser().MaxDepth(maxParseDepth).SAXHandler(h)
+		// scanProlog retains the declaration so the body uses its XML version.
+		// StartDocument emits no token here; the prolog already delivered it.
+		// CharsetReader has converted a declared non-UTF-8 stream to UTF-8.
+		p := helium.NewParser().MaxDepth(maxParseDepth).SAXHandler(h).
+			IgnoreEncoding(d.detectedCharset != "")
 		_, err := p.ParseReader(ctx, r)
 		if err != nil {
 			select {
@@ -390,6 +388,9 @@ func (d *Decoder) RawToken() (Token, error) {
 }
 
 func (d *Decoder) readToken(raw bool) (Token, error) {
+	if d.initErr != nil {
+		return nil, d.initErr
+	}
 	// Drain pre-scanned prolog tokens first.
 	if d.prologIdx < len(d.prologTokens) {
 		tok := stdxml.CopyToken(d.prologTokens[d.prologIdx])
@@ -404,7 +405,7 @@ func (d *Decoder) readToken(raw bool) (Token, error) {
 		// checkXMLDecl rejects.
 		if pi, ok := tok.(ProcInst); ok && isReservedXMLTarget(pi.Target) {
 			if err := d.checkXMLDecl(pi.Target, string(pi.Inst)); err != nil {
-				return nil, err
+				return d.failInitialization(err)
 			}
 		}
 
@@ -422,7 +423,6 @@ func (d *Decoder) readToken(raw bool) (Token, error) {
 	// Lazy-start the SAX emitter on first non-prolog read. This allows
 	// callers to set Entity, CharsetReader, etc. after NewDecoder returns.
 	if !d.saxStarted && d.tokenReader == nil {
-		d.saxStarted = true
 		if d.prologOnly {
 			d.events = make(chan tokenEvent)
 			close(d.events)
@@ -433,25 +433,23 @@ func (d *Decoder) readToken(raw bool) (Token, error) {
 			// encoding before the streaming parse.
 			fixedReader, err := d.applyFixedWidthEncodingPolicy(reader)
 			if err != nil {
-				d.combinedReader = nil
-				return nil, err
+				return d.failInitialization(err)
 			}
 			reader = fixedReader
 			if d.detectedCharset != "" && d.CharsetReader != nil {
 				newr, err := d.CharsetReader(d.detectedCharset, bufio.NewReader(reader))
 				if err != nil {
-					d.combinedReader = nil
-					return nil, fmt.Errorf("xml: opening charset %q: %w", d.detectedCharset, err)
+					return d.failInitialization(fmt.Errorf("xml: opening charset %q: %w", d.detectedCharset, err))
 				}
 				if newr == nil {
-					d.combinedReader = nil
-					return nil, fmt.Errorf("xml: CharsetReader returned nil Reader for charset %q", d.detectedCharset)
+					return d.failInitialization(fmt.Errorf("xml: CharsetReader returned nil Reader for charset %q", d.detectedCharset))
 				}
 				reader = ensureReader(newr)
 			}
 			d.events = make(chan tokenEvent, 64)
 			d.startSAX(reader)
 		}
+		d.saxStarted = true
 		d.combinedReader = nil // release reference
 	}
 
@@ -550,6 +548,12 @@ func (d *Decoder) readToken(raw bool) (Token, error) {
 	return tok, nil
 }
 
+func (d *Decoder) failInitialization(err error) (Token, error) {
+	d.initErr = err
+	d.combinedReader = nil
+	return nil, err
+}
+
 // isReservedXMLTarget reports whether target is the reserved processing-
 // instruction target "xml" in ANY casing. XML 1.0 §2.6 reserves it via
 //
@@ -567,9 +571,9 @@ func isReservedXMLTarget(target string) bool {
 }
 
 // checkXMLDecl is the declaration gate for a ProcInst whose target is the
-// reserved "xml" name, used on the Decoder paths where helium does not otherwise
-// judge the declaration in context (the reader path blanks it out of the bytes
-// replayed to the parser; the TokenReader path carries no bytes at all). Only
+// reserved "xml" name. The reader path checks the declaration before returning
+// its token and retains it for the subsequent body parse; the TokenReader path
+// carries no bytes and relies on the standalone declaration probe. Only
 // the lowercase "xml" introduces an XML declaration; a target in any other
 // casing is an illegal PITarget (isReservedXMLTarget) and is rejected before its
 // pseudo-attributes are read. For the lowercase target the declaration is
@@ -611,10 +615,10 @@ var errDeclInstTerminator = &stdxml.SyntaxError{
 // followed by a minimal root — and hands it to helium, whose parse is the
 // authority for the XMLDecl grammar (XML 1.0 §2.8) and the version rule: 1.0 and
 // 1.1 are supported (helium implements XML 1.1), and a version outside the 1.x
-// family is rejected. Every Decoder path that has a declaration but no in-context
-// helium parse routes its verdict through here, so the grammar and version rules
-// cannot drift from helium's. On success it returns the declared encoding (the
-// "utf8" sentinel when none was declared) for the CharsetReader rule; on failure
+// family is rejected. Reader and TokenReader declaration tokens use this probe
+// before being returned, so their grammar and version rules agree with helium's.
+// On success it returns the declared encoding (the "utf8" sentinel when none
+// was declared) for the CharsetReader rule; on failure
 // it returns helium's verdict as an [encoding/xml.SyntaxError].
 func heliumDeclDecision(data string) (string, error) {
 	// Guard the reconstructed declaration's own boundary. data is the ProcInst

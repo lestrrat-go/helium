@@ -4,12 +4,15 @@ import (
 	"bytes"
 	"context"
 	stdxml "encoding/xml"
+	"errors"
 	"io"
 	"strings"
 	"testing"
+	"testing/synctest"
 
 	"github.com/lestrrat-go/helium/shim"
 	"github.com/stretchr/testify/require"
+	"golang.org/x/text/encoding/charmap"
 )
 
 // byteOnlyReader implements io.Reader and io.ByteReader. When passed to
@@ -23,6 +26,44 @@ func (b *byteOnlyReader) Read(p []byte) (int, error) { return b.r.Read(p) }
 func (b *byteOnlyReader) ReadByte() (byte, error)    { return b.r.ReadByte() }
 
 func TestDecoder(t *testing.T) {
+	t.Run("XML 1.1 body version", func(t *testing.T) {
+		for _, encoding := range []string{"UTF-8", "ISO-8859-1"} {
+			input := `<?xml version="1.1" encoding="` + encoding + `"?><root>&#1;é</root>`
+			if encoding == "ISO-8859-1" {
+				input = strings.ReplaceAll(input, "é", "\xe9")
+			}
+			decoder := shim.NewDecoder(t.Context(), strings.NewReader(input))
+			t.Cleanup(decoder.Close)
+			decoder.CharsetReader = func(_ string, r io.Reader) (io.Reader, error) {
+				return charmap.ISO8859_1.NewDecoder().Reader(r), nil
+			}
+			var result struct {
+				Text string `xml:",chardata"`
+			}
+			require.NoError(t, decoder.Decode(&result))
+			require.Equal(t, "\x01é", result.Text)
+		}
+	})
+
+	t.Run("initialization error is terminal", func(t *testing.T) {
+		for _, callbackErr := range []error{errors.New("conversion unavailable"), nil} {
+			synctest.Test(t, func(t *testing.T) {
+				input := `<?xml version="1.0" encoding="ISO-8859-1"?><root/>`
+				decoder := shim.NewDecoder(t.Context(), strings.NewReader(input))
+				t.Cleanup(decoder.Close)
+				decoder.CharsetReader = func(string, io.Reader) (io.Reader, error) { return nil, callbackErr }
+				_, err := decoder.Token()
+				require.NoError(t, err)
+				_, initialErr := decoder.Token()
+				require.Error(t, initialErr)
+				_, err = decoder.Token()
+				require.EqualError(t, err, initialErr.Error())
+				decoder.Close()
+				_, err = decoder.RawToken()
+				require.EqualError(t, err, initialErr.Error())
+			})
+		}
+	})
 	t.Run("implicit-xml-namespace-on-attribute", func(t *testing.T) {
 		dec := shim.NewDecoder(t.Context(), strings.NewReader(`<root xml:lang="en"/>`))
 		defer dec.Close()

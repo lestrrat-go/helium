@@ -22,15 +22,13 @@ var errPrologTooLarge = &stdxml.SyntaxError{Msg: "prolog exceeds maximum size be
 
 // scanProlog reads from r until the first element start tag, tokenizing
 // the XML prolog. It extracts CharData (whitespace), ProcInst, Comment,
-// and Directive tokens and delivers them itself, then blanks each token's
-// bytes out of the replay buffer so the SAX parser re-emits none of them and
-// SAX takes over cleanly from the first element.
+// and Directive tokens and delivers them itself. It retains the XML declaration
+// for the SAX parser's version state and blanks other tokens to avoid duplicates.
 //
 // Returns:
 //   - tokens: the prolog tokens in order
 //   - combined: a reader that replays everything read plus the remaining input
-//     (the prolog tokens blanked to whitespace, so the SAX parser sees only the
-//     root element and everything after)
+//     (the XML declaration retained, other prolog tokens blanked to whitespace)
 //   - prologOnly: true if the entire input is prolog (no root element found)
 func scanProlog(r io.Reader) ([]Token, io.Reader, bool, error) {
 	s := &prologScanner{r: r}
@@ -50,14 +48,9 @@ func scanProlog(r io.Reader) ([]Token, io.Reader, bool, error) {
 
 	prologOnly := (err == io.EOF)
 
-	// Blank every scanned prolog token (the XML declaration, comments, PIs,
-	// and directives) out of the replay buffer. scanProlog already delivered
-	// them as prologTokens, so the SAX parser must not re-emit them. Whatever
-	// whitespace lies between them is left untouched; blanking the tokens to
-	// spaces makes the whole pre-root region whitespace, which helium's parser
-	// ignores. This also keeps the parser from rejecting the declaration as a
-	// misplaced PI (it errors on <?xml?> when preceded by whitespace).
-	// Replacing with spaces preserves byte offsets for InputOffset().
+	// Keep the declaration at its original position so the SAX parser reads
+	// the effective XML version. Blank other tokens that prologTokens already
+	// delivers. Replacing with spaces preserves byte offsets for InputOffset().
 	buf := s.buf.Bytes()
 	for _, span := range s.blankSpans {
 		for i := span[0]; i < span[1] && i < len(buf); i++ {
@@ -182,10 +175,11 @@ func (s *prologScanner) scan() ([]Token, error) {
 				return tokens, &stdxml.SyntaxError{Msg: "expected target name after <?"}
 			}
 
-			// Blank this PI (including the declaration) out of the replay
-			// buffer so the SAX parser never re-emits what prologTokens
-			// already delivered.
-			s.blankSpans = append(s.blankSpans, [2]int{piStart, s.buf.Len()})
+			// A declaration sets the body parser's XML version and produces no
+			// SAX processing-instruction event. Other PIs must be blanked.
+			if pi.Target != "xml" {
+				s.blankSpans = append(s.blankSpans, [2]int{piStart, s.buf.Len()})
+			}
 
 			if isReservedXMLTarget(pi.Target) {
 				// A target equal to "xml" in any casing is the reserved name
@@ -194,11 +188,8 @@ func (s *prologScanner) scan() ([]Token, error) {
 				// ahead of it — leading whitespace, an earlier declaration, a
 				// comment, a PI, a doctype — makes it a misplaced PI, matching
 				// helium's own verdict for a declaration not at position 0. The
-				// bytes are blanked out of the replay buffer so helium never
-				// re-parses them; the drained ProcInst is then held to
-				// checkXMLDecl (in readToken), which accepts the lowercase "xml"
-				// as a declaration and rejects any other casing as an illegal
-				// target.
+				// drained ProcInst is also held to checkXMLDecl (in readToken),
+				// which accepts lowercase "xml" and rejects every other casing.
 				if s.sawContent {
 					return tokens, errDeclNotAtStart
 				}
