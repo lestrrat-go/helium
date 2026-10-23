@@ -55,6 +55,38 @@ func TestSerializeResult(t *testing.T) {
 		require.Contains(t, buf.String(), "<root>hello</root>")
 	})
 
+	t.Run("US-ASCII replaces unrepresentable characters with references", func(t *testing.T) {
+		doc, err := helium.NewParser().Parse(t.Context(), []byte(`<root title="café">café 😀</root>`))
+		require.NoError(t, err)
+
+		for _, encoding := range []string{"US-ASCII", "ascii"} {
+			t.Run(encoding, func(t *testing.T) {
+				var buf bytes.Buffer
+				err := xslt3.SerializeResult(&buf, doc, &xslt3.OutputDef{
+					Method:   outMethodXML,
+					Encoding: encoding,
+				})
+				require.NoError(t, err)
+				require.Equal(t, `<?xml version="1.0" encoding="`+encoding+`"?><root title="caf&#xE9;">caf&#xE9; &#x1F600;</root>`, buf.String())
+				for _, b := range buf.Bytes() {
+					require.Less(t, b, byte(0x80), "US-ASCII output contains byte 0x%X", b)
+				}
+
+				parsed, err := helium.NewParser().Parse(t.Context(), buf.Bytes())
+				require.NoError(t, err)
+				require.Equal(t, "café 😀", helium.CharacterData(parsed.DocumentElement()))
+			})
+		}
+
+		namedDoc, err := helium.NewParser().Parse(t.Context(), []byte(`<élément/>`))
+		require.NoError(t, err)
+		err = xslt3.SerializeResult(&bytes.Buffer{}, namedDoc, &xslt3.OutputDef{
+			Method:   outMethodXML,
+			Encoding: "US-ASCII",
+		})
+		require.ErrorContains(t, err, "cannot be represented in US-ASCII XML markup")
+	})
+
 	t.Run("XML omits writer terminators", func(t *testing.T) {
 		ss := compileStylesheetString(t, `
 <xsl:stylesheet version="3.0" xmlns:xsl="http://www.w3.org/1999/XSL/Transform">

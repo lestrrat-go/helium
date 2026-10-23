@@ -9,6 +9,7 @@ import (
 	"unicode/utf8"
 
 	"github.com/lestrrat-go/helium"
+	xmlencoding "github.com/lestrrat-go/helium/internal/encoding"
 	"github.com/lestrrat-go/helium/internal/lexicon"
 	"github.com/lestrrat-go/helium/stream"
 	"golang.org/x/text/encoding/htmlindex"
@@ -179,7 +180,11 @@ func transcodeToUTF16(w io.Writer, utf8Data []byte) error {
 
 // transcodeToEncoding converts UTF-8 bytes to the target encoding,
 // replacing characters that cannot be represented with XML character references.
-func transcodeToEncoding(w io.Writer, utf8Data []byte, encName string) error {
+func transcodeToEncoding(w io.Writer, utf8Data []byte, encName string, xmlOutput bool) error {
+	if xmlOutput && xmlencoding.IsASCII(encName) {
+		return transcodeXMLToASCII(w, utf8Data)
+	}
+
 	codec, err := htmlindex.Get(encName)
 	if err != nil {
 		// Unknown encoding — fall back to writing UTF-8
@@ -214,6 +219,169 @@ func transcodeToEncoding(w io.Writer, utf8Data []byte, encName string) error {
 		}
 		utf8Data = utf8Data[size:]
 	}
+	return nil
+}
+
+// transcodeXMLToASCII writes XML in US-ASCII, using character references in
+// text and attribute values. XML names, comments, processing instructions, and
+// declarations cannot contain character references, so non-ASCII characters in
+// those contexts fail instead of producing bytes that contradict the encoding.
+func transcodeXMLToASCII(w io.Writer, data []byte) error {
+	const (
+		asciiText = iota
+		asciiMarkup
+		asciiAttribute
+		asciiComment
+		asciiCDATA
+		asciiPI
+		asciiDeclaration
+	)
+
+	state := asciiText
+	var quote byte
+	declarationSubsetDepth := 0
+	for i := 0; i < len(data); {
+		switch state {
+		case asciiText:
+			switch {
+			case bytes.HasPrefix(data[i:], []byte("<!--")):
+				if err := writeFullBytes(w, data[i:i+4]); err != nil {
+					return err
+				}
+				i += 4
+				state = asciiComment
+				continue
+			case bytes.HasPrefix(data[i:], []byte("<![CDATA[")):
+				if err := writeFullBytes(w, data[i:i+9]); err != nil {
+					return err
+				}
+				i += 9
+				state = asciiCDATA
+				continue
+			case bytes.HasPrefix(data[i:], []byte("<?")):
+				if err := writeFullBytes(w, data[i:i+2]); err != nil {
+					return err
+				}
+				i += 2
+				state = asciiPI
+				continue
+			case bytes.HasPrefix(data[i:], []byte("<!")):
+				if err := writeFullBytes(w, data[i:i+2]); err != nil {
+					return err
+				}
+				i += 2
+				state = asciiDeclaration
+				continue
+			case data[i] == '<':
+				if err := writeFullBytes(w, data[i:i+1]); err != nil {
+					return err
+				}
+				i++
+				state = asciiMarkup
+				continue
+			}
+			if err := writeXMLASCIIChar(w, data, &i, true); err != nil {
+				return err
+			}
+		case asciiMarkup:
+			switch data[i] {
+			case '"', '\'':
+				quote = data[i]
+				state = asciiAttribute
+			case '>':
+				state = asciiText
+			}
+			if err := writeXMLASCIIChar(w, data, &i, false); err != nil {
+				return err
+			}
+		case asciiAttribute:
+			if data[i] == quote {
+				state = asciiMarkup
+			}
+			if err := writeXMLASCIIChar(w, data, &i, true); err != nil {
+				return err
+			}
+		case asciiComment:
+			if bytes.HasPrefix(data[i:], []byte("-->")) {
+				if err := writeFullBytes(w, data[i:i+3]); err != nil {
+					return err
+				}
+				i += 3
+				state = asciiText
+				continue
+			}
+			if err := writeXMLASCIIChar(w, data, &i, false); err != nil {
+				return err
+			}
+		case asciiCDATA:
+			if bytes.HasPrefix(data[i:], []byte("]]>")) {
+				if err := writeFullBytes(w, data[i:i+3]); err != nil {
+					return err
+				}
+				i += 3
+				state = asciiText
+				continue
+			}
+			if err := writeXMLASCIIChar(w, data, &i, false); err != nil {
+				return err
+			}
+		case asciiPI:
+			if bytes.HasPrefix(data[i:], []byte("?>")) {
+				if err := writeFullBytes(w, data[i:i+2]); err != nil {
+					return err
+				}
+				i += 2
+				state = asciiText
+				continue
+			}
+			if err := writeXMLASCIIChar(w, data, &i, false); err != nil {
+				return err
+			}
+		case asciiDeclaration:
+			if quote != 0 {
+				if data[i] == quote {
+					quote = 0
+				}
+			} else {
+				switch data[i] {
+				case '"', '\'':
+					quote = data[i]
+				case '[':
+					declarationSubsetDepth++
+				case ']':
+					if declarationSubsetDepth > 0 {
+						declarationSubsetDepth--
+					}
+				case '>':
+					if declarationSubsetDepth == 0 {
+						state = asciiText
+					}
+				}
+			}
+			if err := writeXMLASCIIChar(w, data, &i, false); err != nil {
+				return err
+			}
+		}
+	}
+	return nil
+}
+
+func writeXMLASCIIChar(w io.Writer, data []byte, pos *int, allowReference bool) error {
+	r, size := utf8.DecodeRune(data[*pos:])
+	if r == utf8.RuneError && size == 1 {
+		return fmt.Errorf("xslt3: invalid UTF-8 in serialized XML")
+	}
+	if r >= 0x80 {
+		if !allowReference {
+			return fmt.Errorf("xslt3: character %U cannot be represented in US-ASCII XML markup", r)
+		}
+		if err := writeFullString(w, fmt.Sprintf("&#x%X;", r)); err != nil {
+			return err
+		}
+	} else if err := writeFullBytes(w, data[*pos:*pos+size]); err != nil {
+		return err
+	}
+	*pos += size
 	return nil
 }
 
