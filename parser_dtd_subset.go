@@ -949,6 +949,17 @@ var inputStart = strcursor.Position{Line: 1, Column: 1}
 // parses the content counts the TextDecl in its line and column, as libxml2
 // does; a byte-order mark is not counted.
 func (pctx *parserCtx) decodeExternalPEContentVersion(ctx context.Context, srcURI string, content []byte) ([]byte, string, strcursor.Position, error) {
+	body, version, at, err := pctx.decodeExternalContent(ctx, srcURI, content)
+	if err != nil || version != xmlVersion11 {
+		return body, version, at, err
+	}
+	body, err = io.ReadAll(xml11LineEndingReader(bytes.NewReader(body)))
+	return body, version, at, err
+}
+
+// decodeExternalContent resolves the encoding and TextDecl before line-ending
+// normalization is applied to this external input's replacement text.
+func (pctx *parserCtx) decodeExternalContent(ctx context.Context, srcURI string, content []byte) ([]byte, string, strcursor.Position, error) {
 	entityVersion := pctx.documentVersion()
 	if len(content) == 0 {
 		return content, entityVersion, inputStart, nil

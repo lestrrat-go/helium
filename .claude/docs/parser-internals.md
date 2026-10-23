@@ -103,6 +103,12 @@ forbidden in `psAttributeValue`; PE handling restricted in `psDTD`).
 
 ### XML 1.1 Version-Gated Rules
 `pctx.isXML11()` gates version-specific rules; every non-1.1 document stays byte-identical:
+- Literal line endings are normalized after decoding and reading the XMLDecl/TextDecl, before markup parsing
+  (`parser_line_endings.go`). A streaming transformer maps CRLF, CR+NEL, CR, NEL, and LS to LF, including
+  sequences split across reads. Declarations reject NEL/LS, as XML 1.1 section 2.11 requires. External DTD,
+  parameter-entity, and general-entity content uses the effective TextDecl version in the shared decoder.
+  Internal replacement text is not normalized again, preserving NEL/LS produced by character references.
+  `ParseInNodeContext` inherits the owning document's version and normalizes the supplied fragment.
 - Namespace prefix undeclaration (`xmlns:pfx=""`) — `parser_element.go` `validatePrefixedNamespaceDecl`
 - Restricted characters — raw literal values reject in text, attributes, comments, PIs, CDATA, non-PUBLIC DTD
   literals, cached external-PE bodies, and external-DTD `IGNORE` sections via `parser_content.go`

@@ -267,6 +267,11 @@ func TestParseAttrValue(t *testing.T) {
 						require.NoError(t, err, "U+%04X, XML %s, %d leading bytes", tc.r, version, n)
 						attrs := doc.DocumentElement().Attributes()
 						require.Len(t, attrs, 1)
+						if version == ver11 && (tc.r == 0x85 || tc.r == 0x2028) {
+							// Input line-ending normalization precedes attribute
+							// whitespace normalization, so literal NEL/LS become spaces.
+							value = run[:n] + " z"
+						}
 						require.Equal(t, value, attrs[0].Value(), "U+%04X, XML %s, %d leading bytes", tc.r, version, n)
 					}
 				}
