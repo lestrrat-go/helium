@@ -1,6 +1,7 @@
 package schematron_test
 
 import (
+	"fmt"
 	"runtime"
 	"strings"
 	"testing"
@@ -10,6 +11,33 @@ import (
 	"github.com/lestrrat-go/helium/schematron"
 	"github.com/stretchr/testify/require"
 )
+
+const (
+	testBindingXSLT  = "xslt"
+	testBindingXSLT3 = "xslt3"
+)
+
+func TestCompileRequiredTest(t *testing.T) {
+	t.Parallel()
+	for _, binding := range []string{testBindingXSLT, testBindingXSLT3, "xpath3"} {
+		t.Run(binding, func(t *testing.T) {
+			for _, invalid := range []string{
+				`<assert/>`, `<assert test=""/>`, `<assert tset="false()"/>`,
+				`<report/>`, `<report test=""/>`, `<assert xmlns:x="urn:other" x:test="false()"/>`,
+			} {
+				src := schemaSrc(binding, `<assert test="true()">ok</assert>`+invalid)
+				doc, err := helium.NewParser().Parse(t.Context(), []byte(src))
+				require.NoError(t, err)
+				var messages []string
+				schema, err := schematron.NewCompiler().ErrorHandler(messageCollector{msgs: &messages}).
+					Compile(t.Context(), doc)
+				require.ErrorIs(t, err, schematron.ErrCompileFailed, "%s", invalid)
+				require.Nil(t, schema)
+				require.Contains(t, fmt.Sprint(messages), "test")
+			}
+		})
+	}
+}
 
 func TestCompileXPathDiagnosticExcerpt(t *testing.T) {
 	const prefix = `<schema xmlns="http://purl.oclc.org/dsdl/schematron"><pattern>`

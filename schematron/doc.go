@@ -53,6 +53,7 @@
 //
 // [Validator.Validate] returns [ErrNoSchema] when the Validator has no (or a
 // zero) compiled schema, and [ErrValidationFailed] when assertions fail.
+// Cancellation and expired deadlines return the context error directly.
 // Individual errors are delivered as [*ValidationError] values to the
 // configured [helium.ErrorHandler] (structured fields: Filename, Line,
 // Element, Path, Message).

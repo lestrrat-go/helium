@@ -1276,8 +1276,11 @@ Schematron schema compilation and validation.
   `.Validate(ctx, doc)`
 - `ErrValidationFailed` — sentinel returned by `Validator.Validate` on validation failure; individual `*ValidationError`
   delivered to ErrorHandler
+- Cancellation and deadlines stop validation and return the context error. Diagnostic paths use a sibling-position
+  cache local to each validation run; quiet validation and the default discard handler skip path construction.
 - `ErrNoSchema` — sentinel returned by `Validator.Validate` when the Validator has no compiled schema
 - `ErrCompileFailed` — sentinel returned by `Compiler.Compile`/`CompileFile` when compilation fails
+- Every `assert` and `report` requires a nonempty, unqualified `test` attribute, including in a rule with other valid tests.
 - `ErrUnsupportedQueryBinding` — sentinel returned by `ParseQueryBinding` and by `Compiler.Compile`/`CompileFile` for a
   query language binding this package does not implement
 - **QueryBinding** — `QueryBindingUnspecified` / `QueryBindingXPath1` (`xslt`, absent attribute) /

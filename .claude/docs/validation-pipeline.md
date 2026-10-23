@@ -2361,7 +2361,8 @@ unqualified-only via `getStructuralAttr` (`GetAttributeNS(name, "")`); a prefixe
 Schematron.
 
 **Fatal compile errors:** `compileSchema` wraps the configured handler in a `fatalTrackingHandler`. If any
-`ErrorLevelFatal` diagnostic is emitted (no pattern, pattern with no rule, rule with no test, etc.),
+`ErrorLevelFatal` diagnostic is emitted (no pattern, pattern with no rule, rule with no test, an assert/report
+with a missing or empty unqualified `test`, etc.),
 `Compile`/`CompileFile` return `ErrCompileFailed` with a **nil** `*Schema` — even when no error handler is
 configured, so a broken schema can never validate as success.
 
@@ -2373,6 +2374,12 @@ source through `lexer.DiagnosticExcerpt`; diagnostics stay valid UTF-8 and short
 `Validate` returns `ErrNoSchema` (typed) when the Validator has no compiled schema (`NewValidator(nil)` or zero-value),
 guarding against a nil-deref panic.
 
+Cancellation and deadlines return the context error directly. Validation checks the context at entry, around
+XPath evaluations, between nodes/tests/message parts, during path indexing, and after diagnostic delivery.
+The sibling-position cache (`nodePathCache`) is local to one run and indexes each sibling list once, preserving
+path formatting without repeated scans for every failed test. Quiet mode and the default discard handler skip
+path construction. A subsequent run rebuilds the cache against the current document.
+
 1. Create XPath context with schema's namespaces
 2. For each pattern/rule: evaluate `contextExpr` against document root → node set
    - If the context XPath **errors at evaluation**, surface an `XPath error : ...` diagnostic and mark the document
@@ -2380,7 +2387,7 @@ guarding against a nil-deref panic.
    - Every selected XPath node kind (document, element, attribute, text, comment, and processing instruction) is
      processed as a rule context
    - **First-match-only (ISO Schematron):** within a pattern, each node is processed by only the FIRST rule
-     whose context matches it. A per-pattern `map[helium.Node]bool` (reset each pattern) skips nodes already
+     whose context matches it. A per-pattern `map[helium.Node]struct{}` (reset each pattern) skips nodes already
      claimed by an earlier rule. Scope is per pattern, so a later pattern still fires for the same node.
 3. For each context node:
    - Bind `<let>` variables in **document order** (accumulated, so a later let sees earlier ones, e.g. `<let
