@@ -313,7 +313,7 @@ func TestSerializeResult(t *testing.T) {
 			ResolvedCharMap:      map[rune]string{'r': "R"},
 		}
 
-		requireExactOutputAndShortWrite(t, []byte(`<?xml veRsion="1.0" encoding="UTF-8"?><Root/>`), 1, func(w io.Writer) error {
+		requireExactOutputAndShortWrite(t, []byte(`"<Root\/>"`), 1, func(w io.Writer) error {
 			return xslt3.SerializeResult(w, doc, outDef)
 		})
 	})
@@ -535,6 +535,15 @@ func TestAdaptiveOutput(t *testing.T) {
 }
 
 func TestSerializeItems(t *testing.T) {
+	t.Run("empty JSON", func(t *testing.T) {
+		for _, doc := range []*helium.Document{nil, helium.NewDocument(xmlVersion10, "", helium.StandaloneImplicitNo)} {
+			var buf bytes.Buffer
+			err := xslt3.SerializeItems(&buf, nil, doc, &xslt3.OutputDef{Method: outMethodJSON})
+			require.NoError(t, err)
+			require.Equal(t, "null", buf.String())
+		}
+	})
+
 	t.Run("atomics", func(t *testing.T) {
 		items := xpath3.ItemSlice{
 			xpath3.AtomicValue{TypeName: xpath3.TypeString, Value: "alpha"},
@@ -1150,7 +1159,7 @@ func TestSerializeItems(t *testing.T) {
 			{
 				name:  "Array",
 				want:  `["<root\/>","<root\/>"]`,
-				items: xpath3.ItemSlice{node, node},
+				items: xpath3.ItemSlice{xpath3.NewArray([]xpath3.Sequence{xpath3.ItemSlice{node}, xpath3.ItemSlice{node}})},
 			},
 		} {
 			t.Run(tc.name, func(t *testing.T) {

@@ -1323,19 +1323,30 @@ func TestHandlerError(t *testing.T) {
 // TestSerializePrimaryItems checks that Serialize writes a captured primary
 // item sequence and still serializes a primary result built as a document.
 func TestSerializePrimaryItems(t *testing.T) {
+	const jsonOutput = `<xsl:output method="json"/>`
 	tests := []struct {
 		name   string
 		output string
 		body   string
 		want   string
+		code   string
 	}{
-		{"json map", `<xsl:output method="json"/>`, `<xsl:sequence select="map{'a': 1}"/>`, `{"a":1}`},
-		{"json array", `<xsl:output method="json"/>`, `<xsl:sequence select="[1, 'x']"/>`, `[1,"x"]`},
-		{"adaptive atomic", `<xsl:output method="adaptive"/>`, `<xsl:sequence select="1, 'x'"/>`, "1\n\"x\""},
+		{"json empty", jsonOutput, `<xsl:sequence select="()"/>`, `null`, ""},
+		{"json map", jsonOutput, `<xsl:sequence select="map{'a': 1}"/>`, `{"a":1}`, ""},
+		{"json array", jsonOutput, `<xsl:sequence select="[1, 'x', (), [2, 3]]"/>`, `[1,"x",null,[2,3]]`, ""},
+		{"json empty map value", jsonOutput, `<xsl:sequence select="map{'a': ()}"/>`, `{"a":null}`, ""},
+		{"json sequence", jsonOutput, `<xsl:sequence select="1, 2"/>`, "", lexicon.ErrSERE0023},
+		{"json map sequence", jsonOutput, `<xsl:sequence select="map{'a': (1, 2)}"/>`, "", lexicon.ErrSERE0023},
+		{"json array sequence", jsonOutput, `<xsl:sequence select="[(1, 2)]"/>`, "", lexicon.ErrSERE0023},
+		{"json NaN", jsonOutput, `<xsl:sequence select="number('NaN')"/>`, "", lexicon.ErrSERE0020},
+		{"json positive infinity", jsonOutput, `<xsl:sequence select="1e0 div 0"/>`, "", lexicon.ErrSERE0020},
+		{"json negative infinity", jsonOutput, `<xsl:sequence select="-1e0 div 0"/>`, "", lexicon.ErrSERE0020},
+		{"json function", jsonOutput, `<xsl:sequence select="function($x) { $x }"/>`, "", lexicon.ErrSERE0021},
+		{"adaptive atomic", `<xsl:output method="adaptive"/>`, `<xsl:sequence select="1, 'x'"/>`, "1\n\"x\"", ""},
 		{"adaptive element", `<xsl:output method="adaptive"/>`,
-			`<xsl:sequence select="/r"/>`, `<?xml version="1.0" encoding="UTF-8"?><r/>`},
+			`<xsl:sequence select="/r"/>`, `<?xml version="1.0" encoding="UTF-8"?><r/>`, ""},
 		{"xml build-tree no", `<xsl:output method="xml" build-tree="no" omit-xml-declaration="yes"/>`,
-			`<xsl:sequence select="/r, 1"/>`, `<r/>1`},
+			`<xsl:sequence select="/r, 1"/>`, `<r/>1`, ""},
 	}
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
@@ -1345,6 +1356,13 @@ func TestSerializePrimaryItems(t *testing.T) {
 			src, err := helium.NewParser().Parse(t.Context(), []byte(`<r/>`))
 			require.NoError(t, err)
 			out, err := ss.Transform(src).Serialize(t.Context())
+			if tc.code != "" {
+				var xe *xslt3.XSLTError
+				require.ErrorAs(t, err, &xe)
+				require.Equal(t, tc.code, xe.Code)
+				require.Empty(t, out)
+				return
+			}
 			require.NoError(t, err)
 			require.Equal(t, tc.want, out)
 		})

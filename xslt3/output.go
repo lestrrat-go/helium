@@ -141,6 +141,10 @@ func (out *outputFrame) captureSequenceItems(items xpath3.ItemSlice) {
 // SerializeItems writes a sequence of items (maps, arrays, atomics, nodes)
 // using the specified output definition's method (json or adaptive).
 // This is used for result-documents with method="json" or method="adaptive".
+// JSON represents an empty sequence as null and requires at most one item
+// per value, including map values and array members (SERE0023). Explicit arrays
+// represent JSON arrays. Non-finite numbers raise SERE0020, and function items
+// other than maps and arrays raise SERE0021.
 // An element, document, comment, or processing-instruction node item carrying
 // a character invalid for the target XML version fails with the serialization
 // error SERE0006, emitting no truncated output. Other item kinds (text,
