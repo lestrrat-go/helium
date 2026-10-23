@@ -217,6 +217,8 @@ evaluation of E2 (`/a/(1, .)`) or across evaluations for different nodes. An emp
 
 ### BinaryExpr
 Arithmetic (`+ - * div idiv mod`): atomize both sides → numeric promotion → compute.
+The int64 arithmetic path detects overflow and falls back to `big.Int`, including `-1 * MinInt64` in either
+operand order. Its reverse-division multiplication check handles the overflowing `MinInt64 / -1` case explicitly.
 Logic (`and or`): EBV of both sides.
 Comparison: delegate to `GeneralCompare` or `ValueCompare`.
 
