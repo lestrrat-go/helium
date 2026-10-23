@@ -136,6 +136,9 @@ func (pctx *parserCtx) parseDocument(ctx context.Context) error {
 	if err := pctx.checkBOMEncodingConflict(); err != nil {
 		return pctx.error(ctx, err)
 	}
+	if err := pctx.normalizeXML11Input(); err != nil {
+		return pctx.error(ctx, err)
+	}
 
 	if pctx.treeBuilder != nil {
 		pctx.fastStartDocument()

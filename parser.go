@@ -1146,6 +1146,7 @@ found:
 	}()
 
 	newctx.doc = doc
+	newctx.version = doc.Version()
 
 	// Push in-scope namespaces from the context element into the parser's
 	// namespace stack so that the fragment can resolve prefixed names.
@@ -1168,6 +1169,9 @@ found:
 	}
 
 	if err := newctx.switchEncoding(); err != nil {
+		return nil, err
+	}
+	if err := newctx.normalizeXML11Input(); err != nil {
 		return nil, err
 	}
 	innerCtx := withParserCtx(ctx, newctx)
