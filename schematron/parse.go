@@ -247,6 +247,9 @@ func (sp *schemaParser) compileLet(elem *helium.Element) (*letBinding, error) {
 func (sp *schemaParser) compileTest(compileCtx context.Context, elem *helium.Element, typ testType) *test {
 	testExpr := getStructuralAttr(elem, "test")
 	if testExpr == "" {
+		sp.eh.Handle(compileCtx, helium.NewLeveledError(
+			fmt.Sprintf("element %s at line %d: test attribute is missing or empty\n", testTypeName(typ), elem.Line()),
+			helium.ErrorLevelFatal))
 		return nil
 	}
 

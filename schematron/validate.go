@@ -8,7 +8,10 @@ import (
 	helium "github.com/lestrrat-go/helium"
 )
 
-func validateDocument(ctx context.Context, doc *helium.Document, schema *Schema, cfg *validateConfig, handler helium.ErrorHandler) bool {
+func validateDocument(ctx context.Context, doc *helium.Document, schema *Schema, cfg *validateConfig, handler helium.ErrorHandler) error {
+	if err := ctx.Err(); err != nil {
+		return err
+	}
 	filename := cfg.label
 	if filename == "" {
 		filename = doc.URL()
@@ -17,6 +20,8 @@ func validateDocument(ctx context.Context, doc *helium.Document, schema *Schema,
 		filename = "(string)"
 	}
 	valid := true
+	paths := make(nodePathCache)
+	_, discardDiagnostics := handler.(helium.NilErrorHandler)
 
 	ev := schema.engine.runner(schema.namespaces)
 
@@ -27,7 +32,13 @@ func validateDocument(ctx context.Context, doc *helium.Document, schema *Schema,
 		// rules. The set is reset for each pattern.
 		matched := make(map[helium.Node]struct{})
 		for _, r := range pat.rules {
+			if err := ctx.Err(); err != nil {
+				return err
+			}
 			result, err := ev.evaluate(ctx, r.contextExpr, doc)
+			if ctxErr := ctx.Err(); ctxErr != nil {
+				return ctxErr
+			}
 			if err != nil {
 				// A rule context that cannot be evaluated means none of
 				// the rule's assertions can be checked. Treat this as a
@@ -41,6 +52,9 @@ func validateDocument(ctx context.Context, doc *helium.Document, schema *Schema,
 			// A rule context that selects anything other than nodes claims
 			// no node at all. Every XPath node kind is a valid rule context.
 			for _, node := range result.nodeSet() {
+				if err := ctx.Err(); err != nil {
+					return err
+				}
 				// Skip nodes already matched by an earlier rule in this
 				// pattern (first-match-only semantics).
 				if _, ok := matched[node]; ok {
@@ -54,7 +68,13 @@ func validateDocument(ctx context.Context, doc *helium.Document, schema *Schema,
 				// libxml2's xmlSchematronRegisterVariables behavior.
 				ruleEv := ev
 				for _, lb := range r.lets {
+					if err := ctx.Err(); err != nil {
+						return err
+					}
 					letResult, err := ruleEv.evaluate(ctx, lb.expr, node)
+					if ctxErr := ctx.Err(); ctxErr != nil {
+						return ctxErr
+					}
 					if err != nil {
 						// A let whose expression cannot be evaluated must
 						// not be silently dropped: a later let or test that
@@ -72,7 +92,13 @@ func validateDocument(ctx context.Context, doc *helium.Document, schema *Schema,
 				}
 
 				for _, t := range r.tests {
+					if err := ctx.Err(); err != nil {
+						return err
+					}
 					boolVal, err := ruleEv.test(ctx, t.compiled, node)
+					if ctxErr := ctx.Err(); ctxErr != nil {
+						return ctxErr
+					}
 
 					// A test XPath that cannot be evaluated, or whose result
 					// has no effective boolean value, must not be treated as
@@ -85,6 +111,9 @@ func validateDocument(ctx context.Context, doc *helium.Document, schema *Schema,
 						valid = false
 						boolVal = false
 						handler.Handle(ctx, helium.NewLeveledError(fmt.Sprintf("XPath error : %s\n", formatXPathError(err)), helium.ErrorLevelError))
+					}
+					if err := ctx.Err(); err != nil {
+						return err
 					}
 
 					// Assert: fire error when false.
@@ -99,15 +128,22 @@ func validateDocument(ctx context.Context, doc *helium.Document, schema *Schema,
 					if fire {
 						valid = false
 						msg, xpathErr := formatMessage(ctx, ruleEv, t.message, node)
+						if err := ctx.Err(); err != nil {
+							return err
+						}
 						if xpathErr != "" {
 							handler.Handle(ctx, helium.NewLeveledError(xpathErr+"\n", helium.ErrorLevelError))
 						}
-						if !cfg.quiet {
+						if !cfg.quiet && !discardDiagnostics {
+							path, err := paths.path(ctx, node)
+							if err != nil {
+								return err
+							}
 							ve := ValidationError{
 								Filename: filename,
 								Line:     node.Line(),
 								Element:  node.Name(),
-								Path:     getNodePath(node),
+								Path:     path,
 								Message:  msg,
 							}
 							handler.Handle(ctx, &ve)
@@ -118,7 +154,13 @@ func validateDocument(ctx context.Context, doc *helium.Document, schema *Schema,
 		}
 	}
 
-	return valid
+	if err := ctx.Err(); err != nil {
+		return err
+	}
+	if !valid {
+		return ErrValidationFailed
+	}
+	return nil
 }
 
 // formatMessage interpolates message parts against a context node.
@@ -129,9 +171,12 @@ func validateDocument(ctx context.Context, doc *helium.Document, schema *Schema,
 // after each segment (text, name, value-of), if the accumulated buffer
 // ends with whitespace, all trailing whitespace is replaced with a
 // single space. Internal whitespace within segments is preserved.
-func formatMessage(ctx context.Context, ev runner, parts []messagePart, node helium.Node) (msg string, xpathErr string) {
+func formatMessage(ctx context.Context, ev runner, parts []messagePart, node helium.Node) (string, string) {
 	var buf []byte
 	for _, part := range parts {
+		if ctx.Err() != nil {
+			return string(buf), ""
+		}
 		switch p := part.(type) {
 		case textPart:
 			buf = append(buf, p.text...)
@@ -196,11 +241,15 @@ func trimTrailingWS(buf []byte) []byte {
 	return append(buf, ' ')
 }
 
-// getNodePath returns the XPath path to a node (equivalent to libxml2's xmlGetNodePath).
+// nodePathCache indexes each sibling list once per validation run.
+// Its keys and positions cannot outlive the run because the document may change.
+type nodePathCache map[helium.Node]int
+
+// path returns the XPath path to a node (equivalent to libxml2's xmlGetNodePath).
 // For elements: /root/parent/child[N] where [N] is added only when siblings share the name.
-func getNodePath(n helium.Node) string {
+func (paths nodePathCache) path(ctx context.Context, n helium.Node) (string, error) {
 	if n == nil {
-		return ""
+		return "", nil
 	}
 
 	// Attribute leaves are not part of the element ancestry walk below
@@ -208,15 +257,21 @@ func getNodePath(n helium.Node) string {
 	// path and append /@<name>, matching libxml2's xmlGetNodePath
 	// (e.g. /root/@id).
 	if n.Type() == helium.AttributeNode {
-		parent := getNodePath(n.Parent())
+		parent, err := paths.path(ctx, n.Parent())
+		if err != nil {
+			return "", err
+		}
 		if parent == "/" {
 			parent = ""
 		}
-		return parent + "/@" + n.Name()
+		return parent + "/@" + n.Name(), nil
 	}
 
 	var parts []string
 	for cur := n; cur != nil; cur = cur.Parent() {
+		if err := ctx.Err(); err != nil {
+			return "", err
+		}
 		if cur.Type() == helium.DocumentNode {
 			break
 		}
@@ -224,7 +279,10 @@ func getNodePath(n helium.Node) string {
 			continue
 		}
 		name := cur.Name()
-		pos := siblingPosition(cur)
+		pos, err := paths.siblingPosition(ctx, cur)
+		if err != nil {
+			return "", err
+		}
 		if pos > 0 {
 			parts = append(parts, fmt.Sprintf("%s[%d]", name, pos))
 		} else {
@@ -237,38 +295,38 @@ func getNodePath(n helium.Node) string {
 		parts[i], parts[j] = parts[j], parts[i]
 	}
 
-	return "/" + strings.Join(parts, "/")
+	return "/" + strings.Join(parts, "/"), nil
 }
 
 // siblingPosition returns the 1-based position among same-named siblings,
 // or 0 if the element is the only one with that name among its siblings.
-func siblingPosition(n helium.Node) int {
-	name := n.Name()
+func (paths nodePathCache) siblingPosition(ctx context.Context, n helium.Node) (int, error) {
+	if pos, ok := paths[n]; ok {
+		return pos, nil
+	}
 	parent := n.Parent()
 	if parent == nil {
-		return 0
+		return 0, nil
 	}
 
-	count := 0
+	counts := make(map[string]int)
 	for sib := range helium.Children(parent) {
-		if sib.Type() == helium.ElementNode && sib.Name() == name {
-			count++
+		if err := ctx.Err(); err != nil {
+			return 0, err
+		}
+		if sib.Type() == helium.ElementNode {
+			counts[sib.Name()]++
+			paths[sib] = counts[sib.Name()]
 		}
 	}
 
-	if count <= 1 {
-		return 0 // unique name, no position needed
-	}
-
-	// Count position.
-	pos := 0
 	for sib := range helium.Children(parent) {
-		if sib.Type() == helium.ElementNode && sib.Name() == name {
-			pos++
-			if sib == n {
-				return pos
-			}
+		if err := ctx.Err(); err != nil {
+			return 0, err
+		}
+		if sib.Type() == helium.ElementNode && counts[sib.Name()] == 1 {
+			paths[sib] = 0
 		}
 	}
-	return 0
+	return paths[n], nil
 }

@@ -501,8 +501,9 @@ All validation errors flow through `ErrorHandler.Handle()`. No `strings.Builder`
 
 ### Schematron
 
-`Validate()` returns `ErrValidationFailed` sentinel on failure. Individual `*ValidationError` errors go to
-`ErrorHandler`. `Quiet()` suppresses error delivery to the handler.
+`Validate()` returns `ErrValidationFailed` on invalid input and the context error on cancellation or an expired
+deadline. Individual `*ValidationError` errors go to `ErrorHandler`. `Quiet()` suppresses those validation
+diagnostics; XPath evaluation diagnostics still reach the handler.
 
 ### DTD
 
