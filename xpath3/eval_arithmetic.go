@@ -221,6 +221,11 @@ func mulInt64(a, b int64) (int64, bool) {
 	if a == 0 || b == 0 {
 		return 0, true
 	}
+	// Division of MinInt64 by -1 also overflows, so the reverse-division
+	// check cannot detect this product when -1 is the first operand.
+	if a == -1 && b == math.MinInt64 {
+		return 0, false
+	}
 	r := a * b
 	if r/a != b {
 		return 0, false
