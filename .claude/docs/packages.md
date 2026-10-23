@@ -1244,6 +1244,8 @@ XInclude 1.0 processing with recursive inclusion and fallback.
 - Default `NewFSResolver` converts absolute `file:` hrefs to OS paths via `internal/iofs.FileURIToPath` (non-local hosts
   rejected)
 - Max URI 2000 chars, circular detection, doc/text caching
+- Root inclusion replacements, including `xi:fallback`, require exactly one element. Invalid fallbacks fail
+  before detaching the include or its fallback children; nested fallbacks may contain any number of elements.
 - Files: `xinclude.go`
 - Imports: helium, xpointer/, internal/encoding/, internal/iofs/, internal/lexicon/
 

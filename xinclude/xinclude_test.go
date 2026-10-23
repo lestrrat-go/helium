@@ -443,6 +443,35 @@ func TestXIncludeFallback(t *testing.T) {
 	require.True(t, found, "fallback content not found")
 }
 
+func TestXIncludeRootFallback(t *testing.T) {
+	t.Parallel()
+	for _, tc := range []struct {
+		name, content, wantError string
+	}{
+		{name: "one element", content: `<a/>`},
+		{name: "two elements", content: `<a/><b/>`, wantError: "multiple root nodes"},
+		{name: "no elements", wantError: "no root node"},
+		{name: "text only", content: `text`, wantError: "no root node"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			doc := parseXML(t, `<xi:include xmlns:xi="http://www.w3.org/2001/XInclude" href="missing.xml">`+
+				`<xi:fallback>`+tc.content+`</xi:fallback></xi:include>`)
+			original := doc.DocumentElement()
+			count, err := xinclude.NewProcessor().Resolver(&stringResolver{files: map[string]string{}}).
+				NoXIncludeMarkers().Process(t.Context(), doc)
+			if tc.wantError != "" {
+				require.ErrorContains(t, err, tc.wantError)
+				require.Zero(t, count)
+				require.True(t, original == doc.DocumentElement(), "failed replacement must leave the root intact")
+				return
+			}
+			require.NoError(t, err)
+			require.Equal(t, 1, count)
+			require.Equal(t, "a", doc.DocumentElement().Name())
+		})
+	}
+}
+
 // TestXIncludeTextEmptyEncoding verifies that a present-but-empty encoding=""
 // on a parse="text" include is treated as an unsupported encoding (a resource
 // error), not as an absent encoding that would let the raw bytes be consumed as
