@@ -497,9 +497,22 @@ func maxMinCommon(atoms []AtomicValue, isMax bool, coll *collationImpl) (Sequenc
 	return SingleAtomic(bestOrig), nil
 }
 
-func fnSum(_ context.Context, args []Sequence) (Sequence, error) {
+func fnSum(ctx context.Context, args []Sequence) (Sequence, error) {
 	// Atomize to handle arrays: sum([1,2,3]) should flatten the array
-	atoms, err := AtomizeSequence(args[0])
+	ec := getFnContext(ctx)
+	maxNodes := fnMaxNodes(ec)
+	check := func() error { return fnCountOp(ctx, ec) }
+	var atoms []AtomicValue
+	_, err := atomizeStreamChecked(args[0], nil, check, func(a AtomicValue) (bool, error) {
+		if err := check(); err != nil {
+			return false, err
+		}
+		if maxNodes > 0 && len(atoms) >= maxNodes {
+			return false, ErrNodeSetLimit
+		}
+		atoms = append(atoms, a)
+		return true, nil
+	})
 	if err != nil {
 		return nil, err
 	}
@@ -532,6 +545,9 @@ func fnSum(_ context.Context, args []Sequence) (Sequence, error) {
 	widest := TypeInteger
 
 	for _, a := range atoms {
+		if err := check(); err != nil {
+			return nil, err
+		}
 		a, err = promoteForAggregate(a)
 		if err != nil {
 			return nil, err
@@ -571,9 +587,12 @@ func fnSum(_ context.Context, args []Sequence) (Sequence, error) {
 	if family == familyDurationYM || family == familyDurationDT {
 		atomSeq := make(ItemSlice, len(atoms))
 		for i, a := range atoms {
+			if err := check(); err != nil {
+				return nil, err
+			}
 			atomSeq[i] = a
 		}
-		return sumDurations(atomSeq, family)
+		return sumDurations(ctx, atomSeq, family)
 	}
 	if allInt {
 		return SingleIntegerBig(sumInt), nil
@@ -587,12 +606,16 @@ func fnSum(_ context.Context, args []Sequence) (Sequence, error) {
 	return SingleDouble(sumFloat), nil
 }
 
-func sumDurations(seq Sequence, family string) (Sequence, error) {
+func sumDurations(ctx context.Context, seq Sequence, family string) (Sequence, error) {
+	ec := getFnContext(ctx)
 	if family == familyDurationDT {
 		// Accumulate dayTime seconds EXACTLY so large totals (beyond float64's
 		// 2^53 range) and fractional seconds canonicalize precisely.
 		totalSecs := new(big.Rat)
 		for item := range seqItems(seq) {
+			if err := fnCountOp(ctx, ec); err != nil {
+				return nil, err
+			}
 			a, _ := AtomizeItem(item)
 			totalSecs.Add(totalSecs, durationToRat(a.DurationVal(), false))
 		}
@@ -612,6 +635,9 @@ func sumDurations(seq Sequence, family string) (Sequence, error) {
 	// to an invalid negative lexical; reject anything that overflows int.
 	totalMonths := new(big.Int)
 	for item := range seqItems(seq) {
+		if err := fnCountOp(ctx, ec); err != nil {
+			return nil, err
+		}
 		a, _ := AtomizeItem(item)
 		d := a.DurationVal()
 		m := big.NewInt(int64(d.Months))

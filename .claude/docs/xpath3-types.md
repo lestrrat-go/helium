@@ -272,6 +272,10 @@ Per XPath 3.1 Section 2.6.2:
 - Array → flattened to the atomization of its members (recursively); a function or map member raises `FOTY0013`
 - Function/map → error `FOTY0013`
 
+`atomizeStreamChecked` shares the recursive atomization worker and accepts a work check at sequence entries
+and items, including empty array members. `sum` uses it to honor cancellation and operation limits while
+building its bounded atomic-value buffer; plain `AtomizeSequence` keeps its context-free API.
+
 The same flatten-arrays / error-on-function-or-map rule governs the `||` string-concatenation path (`concatToString`,
 `eval_operators.go`): array operands flatten to their atomized members, only function and map items raise `FOTY0014`.
 

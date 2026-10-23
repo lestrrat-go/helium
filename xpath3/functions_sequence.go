@@ -49,11 +49,29 @@ func fnHead(_ context.Context, args []Sequence) (Sequence, error) {
 	return ItemSlice{args[0].Get(0)}, nil
 }
 
-func fnTail(_ context.Context, args []Sequence) (Sequence, error) {
+func fnTail(ctx context.Context, args []Sequence) (Sequence, error) {
 	if seqLen(args[0]) <= 1 {
 		return validNilSequence, nil
 	}
-	return ItemSlice(seqMaterialize(args[0])[1:]), nil
+	ec := getFnContext(ctx)
+	maxNodes := fnMaxNodes(ec)
+	var result ItemSlice
+	first := true
+	for item := range seqItems(args[0]) {
+		if first {
+			if err := fnCountOp(ctx, ec); err != nil {
+				return nil, err
+			}
+			first = false
+			continue
+		}
+		var err error
+		result, err = appendBoundedSeq(ctx, ec, result, ItemSlice{item}, maxNodes)
+		if err != nil {
+			return nil, err
+		}
+	}
+	return result, nil
 }
 
 func fnInsertBefore(ctx context.Context, args []Sequence) (Sequence, error) {
@@ -290,19 +308,22 @@ func fnDeepEqual(ctx context.Context, args []Sequence) (Sequence, error) {
 	if ec := getFnContext(ctx); ec != nil {
 		opts.implicitTZ = ec.getImplicitTimezone()
 	}
-	eq, err := deepEqualSequence(args[0], args[1], opts)
+	eq, err := deepEqualSequence(ctx, args[0], args[1], opts)
 	if err != nil {
 		return nil, err
 	}
 	return SingleBoolean(eq), nil
 }
 
-func deepEqualSequence(a, b Sequence, opts deepEqualOptions) (bool, error) {
+func deepEqualSequence(ctx context.Context, a, b Sequence, opts deepEqualOptions) (bool, error) {
+	if err := fnCountOp(ctx, getFnContext(ctx)); err != nil {
+		return false, err
+	}
 	if seqLen(a) != seqLen(b) {
 		return false, nil
 	}
 	for i := range seqLen(a) {
-		eq, err := deepEqualItem(a.Get(i), b.Get(i), opts)
+		eq, err := deepEqualItem(ctx, a.Get(i), b.Get(i), opts)
 		if err != nil {
 			return false, err
 		}
@@ -313,7 +334,10 @@ func deepEqualSequence(a, b Sequence, opts deepEqualOptions) (bool, error) {
 	return true, nil
 }
 
-func deepEqualItem(a, b Item, opts deepEqualOptions) (bool, error) {
+func deepEqualItem(ctx context.Context, a, b Item, opts deepEqualOptions) (bool, error) {
+	if err := fnCountOp(ctx, getFnContext(ctx)); err != nil {
+		return false, err
+	}
 	switch av := a.(type) {
 	case AtomicValue:
 		bv, ok := b.(AtomicValue)
@@ -326,19 +350,19 @@ func deepEqualItem(a, b Item, opts deepEqualOptions) (bool, error) {
 		if !ok {
 			return false, nil
 		}
-		return deepEqualNode(av.Node, bv.Node, opts), nil
+		return deepEqualNode(ctx, av.Node, bv.Node, opts)
 	case MapItem:
 		bv, ok := b.(MapItem)
 		if !ok {
 			return false, nil
 		}
-		return deepEqualMap(av, bv, opts)
+		return deepEqualMap(ctx, av, bv, opts)
 	case ArrayItem:
 		bv, ok := b.(ArrayItem)
 		if !ok {
 			return false, nil
 		}
-		return deepEqualArray(av, bv, opts)
+		return deepEqualArray(ctx, av, bv, opts)
 	case FunctionItem:
 		if _, ok := b.(FunctionItem); ok {
 			return false, &XPathError{Code: lexicon.ErrFOTY0015, Message: "deep-equal: cannot compare function items"}
@@ -373,9 +397,13 @@ func deepEqualAtomic(a, b AtomicValue, opts deepEqualOptions) (bool, error) {
 	return eq, nil
 }
 
-func deepEqualNode(a, b helium.Node, opts deepEqualOptions) bool {
+func deepEqualNode(ctx context.Context, a, b helium.Node, opts deepEqualOptions) (bool, error) {
+	ec := getFnContext(ctx)
+	if err := fnCountOp(ctx, ec); err != nil {
+		return false, err
+	}
 	if a.Type() != b.Type() {
-		return false
+		return false, nil
 	}
 	strEq := func(sa, sb string) bool {
 		if opts.coll != nil {
@@ -385,74 +413,78 @@ func deepEqualNode(a, b helium.Node, opts deepEqualOptions) bool {
 	}
 	switch a.Type() {
 	case helium.DocumentNode:
-		return deepEqualChildren(a, b, opts)
+		return deepEqualChildren(ctx, a, b, opts)
 	case helium.ElementNode:
 		ae, aOK := a.(*helium.Element)
 		be, bOK := b.(*helium.Element)
 		if !aOK || !bOK {
-			return false
+			return false, nil
 		}
 		// Compare expanded name (local name + namespace URI)
 		if ae.LocalName() != be.LocalName() || ae.URI() != be.URI() {
-			return false
+			return false, nil
 		}
 		// Compare attributes (order-independent)
 		aAttrs := ae.Attributes()
 		bAttrs := be.Attributes()
 		if len(aAttrs) != len(bAttrs) {
-			return false
+			return false, nil
 		}
 		for _, aa := range aAttrs {
 			found := false
 			for _, ba := range bAttrs {
+				if err := fnCountOp(ctx, ec); err != nil {
+					return false, err
+				}
 				if aa.LocalName() == ba.LocalName() && aa.URI() == ba.URI() {
 					if !strEq(aa.Value(), ba.Value()) {
-						return false
+						return false, nil
 					}
 					found = true
 					break
 				}
 			}
 			if !found {
-				return false
+				return false, nil
 			}
 		}
 		// Compare children
-		return deepEqualChildren(a, b, opts)
+		return deepEqualChildren(ctx, a, b, opts)
 	case helium.AttributeNode:
 		aa, aOK := a.(*helium.Attribute)
 		ba, bOK := b.(*helium.Attribute)
 		if !aOK || !bOK {
-			return false
+			return false, nil
 		}
-		return aa.LocalName() == ba.LocalName() && aa.URI() == ba.URI() && strEq(aa.Value(), ba.Value())
+		return aa.LocalName() == ba.LocalName() && aa.URI() == ba.URI() && strEq(aa.Value(), ba.Value()), nil
 	case helium.NamespaceNode:
-		return a.Name() == b.Name() && string(a.Content()) == string(b.Content())
+		return a.Name() == b.Name() && string(a.Content()) == string(b.Content()), nil
 	case helium.TextNode, helium.CDATASectionNode:
-		return strEq(string(a.Content()), string(b.Content()))
+		return strEq(string(a.Content()), string(b.Content())), nil
 	case helium.CommentNode:
-		return string(a.Content()) == string(b.Content())
+		return string(a.Content()) == string(b.Content()), nil
 	case helium.ProcessingInstructionNode:
-		return a.Name() == b.Name() && string(a.Content()) == string(b.Content())
+		return a.Name() == b.Name() && string(a.Content()) == string(b.Content()), nil
 	default:
-		return false
+		return false, nil
 	}
 }
 
-func deepEqualChildren(a, b helium.Node, opts deepEqualOptions) bool {
+func deepEqualChildren(ctx context.Context, a, b helium.Node, opts deepEqualOptions) (bool, error) {
 	ac := a.FirstChild()
 	bc := b.FirstChild()
 	for ac != nil && bc != nil {
-		if !deepEqualNode(ac, bc, opts) {
-			return false
+		eq, err := deepEqualNode(ctx, ac, bc, opts)
+		if err != nil || !eq {
+			return false, err
 		}
 		ac = ac.NextSibling()
 		bc = bc.NextSibling()
 	}
-	return ac == nil && bc == nil
+	return ac == nil && bc == nil, nil
 }
 
-func deepEqualMap(a, b MapItem, opts deepEqualOptions) (bool, error) {
+func deepEqualMap(ctx context.Context, a, b MapItem, opts deepEqualOptions) (bool, error) {
 	if a.Size() != b.Size() {
 		return false, nil
 	}
@@ -461,18 +493,25 @@ func deepEqualMap(a, b MapItem, opts deepEqualOptions) (bool, error) {
 	aKeys := a.keys0()
 	bKeys := b.keys0()
 	bUsed := make([]bool, len(bKeys))
+	ec := getFnContext(ctx)
 	for _, ak := range aKeys {
+		if err := fnCountOp(ctx, ec); err != nil {
+			return false, err
+		}
 		found := false
 		// Try exact lookup first (fast path)
-		if bVal, ok := b.Get(ak); ok {
-			aVal, _ := a.Get(ak)
-			eq, err := deepEqualSequence(aVal, bVal, opts)
+		if bVal, ok := b.get0(ak); ok {
+			aVal, _ := a.get0(ak)
+			eq, err := deepEqualSequence(ctx, aVal, bVal, opts)
 			if err != nil {
 				return false, err
 			}
 			if eq {
 				// Mark the matching b key as used
 				for j, bk := range bKeys {
+					if err := fnCountOp(ctx, ec); err != nil {
+						return false, err
+					}
 					if !bUsed[j] {
 						if sameMapKey(ak, bk) {
 							bUsed[j] = true
@@ -485,16 +524,19 @@ func deepEqualMap(a, b MapItem, opts deepEqualOptions) (bool, error) {
 		}
 		if !found {
 			// Slow path: compare keys by value (cross-type)
-			aVal, _ := a.Get(ak)
+			aVal, _ := a.get0(ak)
 			for j, bk := range bKeys {
+				if err := fnCountOp(ctx, ec); err != nil {
+					return false, err
+				}
 				if bUsed[j] {
 					continue
 				}
 				if !sameMapKey(ak, bk) {
 					continue
 				}
-				bVal, _ := b.Get(bk)
-				eq, err := deepEqualSequence(aVal, bVal, opts)
+				bVal, _ := b.get0(bk)
+				eq, err := deepEqualSequence(ctx, aVal, bVal, opts)
 				if err != nil {
 					return false, err
 				}
@@ -516,14 +558,14 @@ func sameMapKey(a, b AtomicValue) bool {
 	return normalizeMapKey(a) == normalizeMapKey(b)
 }
 
-func deepEqualArray(a, b ArrayItem, opts deepEqualOptions) (bool, error) {
+func deepEqualArray(ctx context.Context, a, b ArrayItem, opts deepEqualOptions) (bool, error) {
 	am0, bm0 := a.members0(), b.members0()
 	if len(am0) != len(bm0) {
 		return false, nil
 	}
 	for i := range am0 {
 		am, bm := am0[i], bm0[i]
-		eq, err := deepEqualSequence(am, bm, opts)
+		eq, err := deepEqualSequence(ctx, am, bm, opts)
 		if err != nil {
 			return false, err
 		}
