@@ -21,16 +21,15 @@ Read ONLY the file relevant to your current task.
 - `xpath3` MUST NOT import `xsd`. XSD atomic types inline in `xpath3/types.go`.
 - Avoid gratuitous external deps. Standard-adjacent packages (e.g., `golang.org/x/text`) are fine when justified.
 - `xpath1` public API unchanged after refactor.
-- Eager sequences (`[]Item`). No lazy iterators in v1.
+- `Sequence` supports eager `ItemSlice` values and lazy ranges/iterators; consumers preserve bounds and cancellation.
 - No static type checking in v1. Type errors at runtime.
 - Helium DOM (`helium.Node`) is sole node model.
 
 ## Out of Scope
 
 - Static type checking / type inference
-- Lazy/streaming sequences
 - FLWOR `group by`, `count`, `window`
-- `fn:transform()`
+- XSLT execution inside `xpath3` itself (`fn:transform()` is supplied by `xslt3`)
 - XQuery
 - Saxon-style optimization / elaboration
 - Unicode collation beyond codepoint order

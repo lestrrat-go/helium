@@ -361,7 +361,7 @@ predicate error on nodes after the first match no longer fires.
 
 ## Build Tags
 
-- `-tags debug` — used in CI (`go test -v -race -tags debug ./...`)
+- CI test jobs use no custom build tags; see `.github/workflows/ci.yml`.
 - No `//go:build` tags in test files
 
 ## Fuzzing
