@@ -1069,10 +1069,13 @@ func (p *processor) handleFallback(inc *helium.Element, origErr error) error {
 	return origErr
 }
 
-func (p *processor) processFallback(inc *helium.Element, fb *helium.Element) error { //nolint:unparam // always nil but callers check for future-proofing
+func (p *processor) processFallback(inc *helium.Element, fb *helium.Element) error {
 	var nodes []helium.Node
 	for c := range helium.Children(fb) {
 		nodes = append(nodes, c)
+	}
+	if err := checkMultiRootInclusion(inc, nodes); err != nil {
+		return err
 	}
 
 	if len(nodes) == 0 {
