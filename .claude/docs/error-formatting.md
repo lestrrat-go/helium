@@ -327,6 +327,9 @@ matches any joined sentinel (see `dynamicErrorCause`).
 
 **Error code checker**: `isXSLTError(err, code) → bool` — unwraps and matches `XSLTError.Code`.
 
+JSON serialization uses `XSLTError` with `SERE0020` for non-finite numbers, `SERE0021` for unsupported
+function items, and `SERE0023` for a sequence containing multiple items at any JSON value position.
+
 ### Shim (`shim/compat_errors.go`)
 
 `convertParseError()` maps helium `ErrParseError` → `encoding/xml.SyntaxError`:

@@ -771,6 +771,7 @@ XSLT 3.0 stylesheet compilation + transformation on helium DOM with `xpath3` eva
   **Invocation.WriteTo(ctx, io.Writer) → error** / **Invocation.ResolvedOutputDef() → *OutputDef** — terminal execution
   + resolved primary output metadata. `Serialize`/`WriteTo` serialize captured primary items directly when the
   effective method is `json` or `adaptive` and the principal document has no children.
+  An empty JSON result serializes as `null`.
 - **NewParameters() → *Parameters** — mutable XSLT parameter carrier keyed by expanded name
 - **TransformFunction(...TransformOption) → xpath3.Function** — standalone `fn:transform()` for registering on
   a bare `xpath3.Evaluator` (`Evaluator.Functions(nil, {fn:transform: ...})`), for callers driving xpath3
@@ -886,6 +887,10 @@ XSLT 3.0 stylesheet compilation + transformation on helium DOM with `xpath3` eva
   `unparsed-entity-uri()`, `unparsed-entity-public-id()`, `type-available()`, `snapshot()`, `copy-of()`,
   `accumulator-before()`/`accumulator-after()`, `current-merge-group()`/`current-merge-key()`, `transform()`
 - Output methods: `xml`, `html`, `xhtml`, `text`, `json`, `adaptive`
+- JSON serializes an empty result as `null`. The result sequence, every map value, and every array member
+  must contain at most one item (`SERE0023`); an explicit XDM array produces a JSON array. Non-finite numeric
+  values raise `SERE0020`, and unsupported function items raise `SERE0021`. A DOM-only result with children
+  is serialized as a JSON node item using `json-node-output-method`.
 - `SerializeResult` (every principal and secondary result) writes no DTD the document carries: `xsl:copy-of` and
   `xsl:copy` of a source document keep its DTD on the copy for its unparsed entities, but XDM has no DTD node, so the
   output definition alone decides the document type declaration. A document with an internal subset is copied

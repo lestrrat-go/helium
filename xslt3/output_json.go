@@ -6,6 +6,7 @@ import (
 	"io"
 
 	"github.com/lestrrat-go/helium"
+	"github.com/lestrrat-go/helium/internal/lexicon"
 	"github.com/lestrrat-go/helium/internal/sequence"
 	"github.com/lestrrat-go/helium/xpath3"
 )
@@ -13,31 +14,27 @@ import (
 // serializeJSONItems serializes a sequence of items as JSON output.
 // Per XSLT 3.0 §26: the sequence is serialized as a single JSON value.
 func serializeJSONItems(w io.Writer, items xpath3.Sequence, doc *helium.Document, outDef *OutputDef) error {
-	itemsLen := 0
-	if items != nil {
-		itemsLen = sequence.Len(items)
+	if sequence.Len(items) == 0 && doc != nil && doc.FirstChild() != nil {
+		items = xpath3.ItemSlice{xpath3.NodeItem{Node: doc}}
 	}
-	if itemsLen == 0 && doc != nil {
-		// No captured items: serialize DOM content as text for JSON
-		return serializeAdaptiveItems(w, items, doc, nil, "", "")
-	}
-	if itemsLen == 1 {
-		s, err := serializeItemJSON(items.Get(0), outDef)
-		if err != nil {
-			return err
-		}
-		return writeFullString(w, s)
-	}
-	// Multiple items: serialize as JSON array
-	members := make([]xpath3.Sequence, itemsLen)
-	for i := range itemsLen {
-		members[i] = xpath3.ItemSlice{items.Get(i)}
-	}
-	s, err := serializeItemJSON(xpath3.NewArray(members), outDef)
+	s, err := serializeSequenceJSON(items, outDef)
 	if err != nil {
 		return err
 	}
 	return writeFullString(w, s)
+}
+
+// serializeSequenceJSON applies the same cardinality rule to the result
+// sequence, map values, and array members. An explicit array is one item.
+func serializeSequenceJSON(items xpath3.Sequence, outDef *OutputDef) (string, error) {
+	switch sequence.Len(items) {
+	case 0:
+		return "null", nil
+	case 1:
+		return serializeItemJSON(items.Get(0), outDef)
+	default:
+		return "", dynamicError(lexicon.ErrSERE0023, "JSON output requires at most one item per value")
+	}
 }
 
 // serializeItemJSON serializes a single XDM item as JSON. The json-node-output
@@ -67,12 +64,9 @@ func serializeItemJSON(item xpath3.Item, outDef *OutputDef) (string, error) {
 		}
 		return jsonEscapeString(nodeStringValue(v.Node)), nil
 	case xpath3.AtomicValue:
-		return serializeAtomicJSON(v), nil
+		return serializeAtomicJSON(v)
 	default:
-		if av, ok := item.(xpath3.AtomicValue); ok {
-			return serializeAtomicJSON(av), nil
-		}
-		return jsonEscapeString(fmt.Sprintf("%v", item)), nil
+		return "", dynamicError(lexicon.ErrSERE0021, "item of type %T cannot be serialized as JSON", item)
 	}
 }
 
@@ -81,11 +75,7 @@ func serializeMapJSON(m xpath3.MapItem, outDef *OutputDef) (string, error) {
 	var buf bytes.Buffer
 	buf.WriteByte('{')
 	first := true
-	var serErr error
-	_ = m.ForEach(func(k xpath3.AtomicValue, v xpath3.Sequence) error {
-		if serErr != nil {
-			return serErr
-		}
+	err := m.ForEach(func(k xpath3.AtomicValue, v xpath3.Sequence) error {
 		if !first {
 			buf.WriteByte(',')
 		}
@@ -93,36 +83,15 @@ func serializeMapJSON(m xpath3.MapItem, outDef *OutputDef) (string, error) {
 		ks, _ := xpath3.AtomicToString(k)
 		buf.WriteString(jsonEscapeString(ks))
 		buf.WriteByte(':')
-		vLen := 0
-		if v != nil {
-			vLen = sequence.Len(v)
+		s, err := serializeSequenceJSON(v, outDef)
+		if err != nil {
+			return err
 		}
-		switch vLen {
-		case 1:
-			s, err := serializeItemJSON(v.Get(0), outDef)
-			if err != nil {
-				serErr = err
-				return err
-			}
-			buf.WriteString(s)
-		case 0:
-			buf.WriteString("null")
-		default:
-			members := make([]xpath3.Sequence, vLen)
-			for i := range vLen {
-				members[i] = xpath3.ItemSlice{v.Get(i)}
-			}
-			s, err := serializeItemJSON(xpath3.NewArray(members), outDef)
-			if err != nil {
-				serErr = err
-				return err
-			}
-			buf.WriteString(s)
-		}
+		buf.WriteString(s)
 		return nil
 	})
-	if serErr != nil {
-		return "", serErr
+	if err != nil {
+		return "", err
 	}
 	buf.WriteByte('}')
 	return buf.String(), nil
@@ -137,57 +106,37 @@ func serializeArrayJSON(a xpath3.ArrayItem, outDef *OutputDef) (string, error) {
 		if i > 0 {
 			buf.WriteByte(',')
 		}
-		mLen := 0
-		if member != nil {
-			mLen = sequence.Len(member)
+		s, err := serializeSequenceJSON(member, outDef)
+		if err != nil {
+			return "", err
 		}
-		switch mLen {
-		case 1:
-			s, err := serializeItemJSON(member.Get(0), outDef)
-			if err != nil {
-				return "", err
-			}
-			buf.WriteString(s)
-		case 0:
-			buf.WriteString("null")
-		default:
-			// Multi-item member: serialize as array
-			submembers := make([]xpath3.Sequence, mLen)
-			for j := range mLen {
-				submembers[j] = xpath3.ItemSlice{member.Get(j)}
-			}
-			s, err := serializeItemJSON(xpath3.NewArray(submembers), outDef)
-			if err != nil {
-				return "", err
-			}
-			buf.WriteString(s)
-		}
+		buf.WriteString(s)
 	}
 	buf.WriteByte(']')
 	return buf.String(), nil
 }
 
 // serializeAtomicJSON serializes an atomic value as JSON.
-func serializeAtomicJSON(v xpath3.AtomicValue) string {
+func serializeAtomicJSON(v xpath3.AtomicValue) (string, error) {
 	typeName := v.TypeName
 	switch typeName {
 	case "xs:boolean":
 		b, _ := xpath3.AtomicToString(v)
-		return b
+		return b, nil
 	case "xs:integer", "xs:int", "xs:long", "xs:short", "xs:byte",
 		"xs:unsignedInt", "xs:unsignedLong", "xs:unsignedShort", "xs:unsignedByte",
 		"xs:positiveInteger", "xs:nonNegativeInteger", "xs:negativeInteger", "xs:nonPositiveInteger":
 		s, _ := xpath3.AtomicToString(v)
-		return s
+		return s, nil
 	case "xs:double", "xs:float", "xs:decimal":
 		s, _ := xpath3.AtomicToString(v)
 		if s == "NaN" || s == "INF" || s == "-INF" || s == "+INF" {
-			return jsonEscapeString(s)
+			return "", dynamicError(lexicon.ErrSERE0020, "numeric value %s cannot be represented in JSON", s)
 		}
-		return s
+		return s, nil
 	default:
 		s, _ := xpath3.AtomicToString(v)
-		return jsonEscapeString(s)
+		return jsonEscapeString(s), nil
 	}
 }
 

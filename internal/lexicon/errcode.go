@@ -62,7 +62,10 @@ const (
 	ErrSERE0012 = "SERE0012" // invalid character in text
 	ErrSERE0014 = "SERE0014" // invalid character in comment or PI
 	ErrSERE0015 = "SERE0015" // invalid character in namespace
+	ErrSERE0020 = "SERE0020" // numeric value cannot be represented in JSON
+	ErrSERE0021 = "SERE0021" // unsupported item in JSON output
 	ErrSERE0022 = "SERE0022" // duplicate keys in JSON map
+	ErrSERE0023 = "SERE0023" // multiple items in a JSON value
 	ErrSESU0007 = "SESU0007" // unsupported output version
 	ErrSESU0011 = "SESU0011" // unsupported normalization form
 	ErrSESU0013 = "SESU0013" // unsupported encoding
