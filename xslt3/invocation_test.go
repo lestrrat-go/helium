@@ -1335,7 +1335,7 @@ func TestSerializePrimaryItems(t *testing.T) {
 		{"json map", jsonOutput, `<xsl:sequence select="map{'a': 1}"/>`, `{"a":1}`, ""},
 		{"json array", jsonOutput, `<xsl:sequence select="[1, 'x', (), [2, 3]]"/>`, `[1,"x",null,[2,3]]`, ""},
 		{"json empty map value", jsonOutput, `<xsl:sequence select="map{'a': ()}"/>`, `{"a":null}`, ""},
-		{"json sequence", jsonOutput, `<xsl:sequence select="1, 2"/>`, "", lexicon.ErrSERE0023},
+		{"json sequence", jsonOutput, `<xsl:sequence select="1, 2"/>`, `[1,2]`, ""},
 		{"json map sequence", jsonOutput, `<xsl:sequence select="map{'a': (1, 2)}"/>`, "", lexicon.ErrSERE0023},
 		{"json array sequence", jsonOutput, `<xsl:sequence select="[(1, 2)]"/>`, "", lexicon.ErrSERE0023},
 		{"json NaN", jsonOutput, `<xsl:sequence select="number('NaN')"/>`, "", lexicon.ErrSERE0020},

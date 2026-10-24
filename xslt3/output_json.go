@@ -17,6 +17,13 @@ func serializeJSONItems(w io.Writer, items xpath3.Sequence, doc *helium.Document
 	if sequence.Len(items) == 0 && doc != nil && doc.FirstChild() != nil {
 		items = xpath3.ItemSlice{xpath3.NodeItem{Node: doc}}
 	}
+	if sequence.Len(items) > 1 {
+		members := make([]xpath3.Sequence, sequence.Len(items))
+		for i := range members {
+			members[i] = xpath3.ItemSlice{items.Get(i)}
+		}
+		items = xpath3.ItemSlice{xpath3.NewArray(members)}
+	}
 	s, err := serializeSequenceJSON(items, outDef)
 	if err != nil {
 		return err

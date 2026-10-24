@@ -887,10 +887,12 @@ XSLT 3.0 stylesheet compilation + transformation on helium DOM with `xpath3` eva
   `unparsed-entity-uri()`, `unparsed-entity-public-id()`, `type-available()`, `snapshot()`, `copy-of()`,
   `accumulator-before()`/`accumulator-after()`, `current-merge-group()`/`current-merge-key()`, `transform()`
 - Output methods: `xml`, `html`, `xhtml`, `text`, `json`, `adaptive`
-- JSON serializes an empty result as `null`. The result sequence, every map value, and every array member
-  must contain at most one item (`SERE0023`); an explicit XDM array produces a JSON array. Non-finite numeric
-  values raise `SERE0020`, and unsupported function items raise `SERE0021`. A DOM-only result with children
-  is serialized as a JSON node item using `json-node-output-method`.
+- JSON serializes an empty result as `null` and a multi-item result sequence as a JSON array. Every map value and
+  array member must contain at most one item (`SERE0023`); an explicit XDM array also produces a JSON array.
+  Non-finite numeric values raise `SERE0020`, and unsupported function items raise `SERE0021`. A DOM-only result
+  with children is serialized as a JSON node item using `json-node-output-method`.
+- XML and XHTML serializers build UTF-8 output, then apply the requested encoding once. XML declarations carry the
+  requested encoding label, and US-ASCII output uses character references for non-ASCII text and attribute values.
 - `SerializeResult` (every principal and secondary result) writes no DTD the document carries: `xsl:copy-of` and
   `xsl:copy` of a source document keep its DTD on the copy for its unparsed entities, but XDM has no DTD node, so the
   output definition alone decides the document type declaration. A document with an internal subset is copied

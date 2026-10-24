@@ -584,6 +584,17 @@ func TestSerializeItems(t *testing.T) {
 			require.Equal(t, "null", buf.String())
 		}
 	})
+	t.Run("multiple JSON result items", func(t *testing.T) {
+		items := xpath3.ItemSlice{
+			xpath3.AtomicValue{TypeName: xpath3.TypeInteger, Value: int64(1)},
+			xpath3.AtomicValue{TypeName: xpath3.TypeInteger, Value: int64(2)},
+		}
+
+		var buf bytes.Buffer
+		err := xslt3.SerializeItems(&buf, items, nil, &xslt3.OutputDef{Method: outMethodJSON})
+		require.NoError(t, err)
+		require.Equal(t, "[1,2]", buf.String())
+	})
 
 	t.Run("atomics", func(t *testing.T) {
 		items := xpath3.ItemSlice{
