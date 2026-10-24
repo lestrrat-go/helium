@@ -196,9 +196,9 @@ func serializeXMLWithCharMapInner(w io.Writer, doc *helium.Document, outDef *Out
 		enc := outDef.Encoding
 		if enc == "" {
 			enc = lexicon.EncodingUTF8U
-		} else if xmlencoding.IsASCII(enc) {
-			// stream.Writer emits UTF-8 directly and refuses an ASCII declaration.
-			// The outer serializer transcodes the completed XML to US-ASCII.
+		} else if !xmlencoding.IsUTF8(enc) {
+			// The outer serializer transcodes the completed UTF-8 XML, so the
+			// stream writer must not encode it before that pass.
 			enc = ""
 		}
 		// The output XML version defaults to 1.0; xsl:output/@version="1.1"

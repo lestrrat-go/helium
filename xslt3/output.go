@@ -421,6 +421,9 @@ func serializeResult(w io.Writer, doc *helium.Document, outDef *OutputDef, charM
 
 	if needsBuffer {
 		data := buf.Bytes()
+		if isXMLOutputMethod(outDef.Method) && outDef.Encoding != "" {
+			data = addEncodingToXMLDeclaration(data, outDef.Encoding)
+		}
 
 		// Apply Unicode normalization if requested
 		if needsNormalization && !charMapNormalizesContent {
@@ -431,11 +434,15 @@ func serializeResult(w io.Writer, doc *helium.Document, outDef *OutputDef, charM
 			return transcodeToUTF16(w, data)
 		}
 		if needsEncodingConversion {
-			return transcodeToEncoding(w, data, enc, outDef.Encoding, outDef.Method == methodXML)
+			return transcodeToEncoding(w, data, enc, isXMLOutputMethod(outDef.Method))
 		}
 		return writeFullBytes(w, data)
 	}
 	return nil
+}
+
+func isXMLOutputMethod(method string) bool {
+	return method == methodXML || method == methodXHTML
 }
 
 // serializeNodeWithMethod serializes a node using the specified output method.

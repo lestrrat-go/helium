@@ -180,9 +180,8 @@ func transcodeToUTF16(w io.Writer, utf8Data []byte) error {
 
 // transcodeToEncoding converts UTF-8 bytes to the target encoding,
 // replacing characters that cannot be represented with XML character references.
-func transcodeToEncoding(w io.Writer, utf8Data []byte, encName, outputLabel string, xmlOutput bool) error {
+func transcodeToEncoding(w io.Writer, utf8Data []byte, encName string, xmlOutput bool) error {
 	if xmlOutput && xmlencoding.IsASCII(encName) {
-		utf8Data = addEncodingToXMLDeclaration(utf8Data, outputLabel)
 		return transcodeXMLToASCII(w, utf8Data)
 	}
 
