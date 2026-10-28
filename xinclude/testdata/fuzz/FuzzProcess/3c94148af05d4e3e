@@ -1,0 +1,6 @@
+go test fuzz v1
+[]byte("<root xmlns:xi=\"http://www.w3.org/2001/XInclude\"><xi:include href=\"#/1/1\"/></root>")
+[]byte("0")
+[]byte("0")
+bool(false)
+bool(true)
